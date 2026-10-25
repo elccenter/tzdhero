@@ -1,0 +1,1232 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>ตำบลธารทอง 3D</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@600;700&family=Sarabun:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+/* Layout: full-screen 3D canvas; parchment HUD cards float at the corners; dialog rises as a bottom sheet */
+:root{
+  color-scheme: dark;
+  --sky:#A8DAF0; --night:#0E1430; --panel:#1E2A55;
+  --parch:#F3E5BC; --parch-edge:#D9C18A; --ink:#3A2A14; --ink-soft:#6B5430;
+  --wood:#3E2810; --gold:#FFC107; --gold-deep:#A87400; --glow:#4FC3F7;
+  --good:#2E7D32; --mid:#B26A00; --bad:#C62828;
+  --f-display:'Chakra Petch','Sarabun',system-ui,sans-serif;
+  --f-body:'Sarabun',system-ui,sans-serif;
+  --gx:max(16px, env(safe-area-inset-left, 0px));
+  --gxr:max(16px, env(safe-area-inset-right, 0px));
+  --gt:calc(env(safe-area-inset-top, 0px) + 12px);
+  --gb:calc(env(safe-area-inset-bottom, 0px) + 16px);
+}
+[hidden]{display:none !important;}
+html,body{height:100%; margin:0; overflow:hidden; background:var(--sky); font-family:var(--f-body); color:var(--ink);
+  -webkit-user-select:none; user-select:none; -webkit-tap-highlight-color:transparent;}
+#tags{position:fixed; inset:0; pointer-events:none; z-index:3; overflow:hidden;}
+.tag3d{position:absolute; left:0; top:0; display:none; white-space:nowrap; font-family:var(--f-body); font-weight:700; line-height:1.25;
+  padding:3px 10px 4px; border:2px solid; border-radius:6px; transform-origin:50% 100%; box-shadow:0 2px 0 #00000059; will-change:transform;}
+#c{position:fixed; inset:0; width:100%; height:100%; display:block; touch-action:none; outline:none;}
+h1,h2,h3{font-family:var(--f-display); margin:0; text-wrap:balance;}
+p{margin:0;}
+button{font-family:inherit;}
+
+.page{
+  background:var(--parch); color:var(--ink);
+  border:3px solid var(--wood);
+  box-shadow:inset 0 0 0 2px var(--gold-deep), inset 0 0 0 4px var(--parch), 0 5px 0 #00000059;
+}
+.btn{
+  font-family:var(--f-display); font-weight:700; font-size:1rem; cursor:pointer;
+  border:3px solid var(--wood); color:#3A2400; padding:12px 18px;
+  background:linear-gradient(180deg,#FFD54F,#FFB300);
+  box-shadow:inset 0 -4px 0 #00000033, 0 4px 0 var(--wood);
+}
+.btn:active{transform:translateY(3px); box-shadow:inset 0 -2px 0 #00000033, 0 1px 0 var(--wood);}
+.btn:focus-visible,.ch:focus-visible{outline:3px solid var(--glow); outline-offset:2px;}
+
+/* ---------- HUD ---------- */
+#obj{position:fixed; top:var(--gt); left:var(--gx); width:min(300px, calc(100vw - 32px - 128px)); padding:10px 12px; z-index:5;
+  display:flex; flex-direction:column; gap:6px;}
+.chip{align-self:flex-start; font-family:var(--f-display); font-weight:700; font-size:.72rem; color:#fff; padding:2px 8px; border:2px solid #00000040;}
+.obj-row{display:flex; gap:8px; align-items:center;}
+.obj-txt{flex:1; min-width:0;}
+.obj-title{font-family:var(--f-display); font-weight:700; font-size:.88rem; color:#7A3E00; line-height:1.3;}
+.obj-text{font-size:.84rem; line-height:1.45;}
+.compass{flex:0 0 46px; text-align:center;}
+.compass svg{width:30px; height:30px; display:block; margin:0 auto; transition:transform .08s linear;}
+.compass span{font-family:var(--f-display); font-size:.7rem; color:var(--ink-soft); font-variant-numeric:tabular-nums;}
+.meters{display:grid; grid-template-columns:1fr 1fr; gap:8px;}
+.meter{font-size:.66rem; font-weight:700; color:var(--ink-soft);}
+.meter .bar{height:7px; background:#0000002e; border:1px solid var(--wood); margin-top:2px; overflow:hidden;}
+.meter .fill{height:100%; transition:width .45s ease;}
+.items{display:flex; gap:4px;}
+.slot{flex:1; aspect-ratio:1; max-width:100%; max-height:34px; display:flex; align-items:center; justify-content:center; font-size:1rem;
+  border:2px solid var(--parch-edge); background:#0000000f; filter:grayscale(1); opacity:.35;}
+.slot.on{filter:none; opacity:1; border-color:var(--gold-deep); background:radial-gradient(circle,#FFF3C2,#FFD54F); box-shadow:0 0 6px #FFC107aa;}
+
+#map{position:fixed; top:var(--gt); right:var(--gxr); width:116px; height:116px; z-index:5; border:3px solid var(--wood);
+  box-shadow:inset 0 0 0 2px var(--gold-deep), 0 5px 0 #00000059; background:#86B852;}
+#mapN{position:fixed; top:calc(var(--gt) + 2px); right:calc(var(--gxr) + 4px); z-index:6; font-family:var(--f-display); font-size:.7rem; color:#fff; text-shadow:0 1px 2px #000;}
+
+#joy{position:fixed; left:calc(var(--gx) + 6px); bottom:calc(var(--gb) + 6px); width:124px; height:124px; border-radius:50%; z-index:5;
+  background:radial-gradient(circle, #ffffff30, #ffffff14 70%); border:3px solid #ffffffa0; touch-action:none;}
+#knob{position:absolute; left:50%; top:50%; width:54px; height:54px; margin:-27px 0 0 -27px; border-radius:50%;
+  background:radial-gradient(circle at 35% 30%, #FFF3C2, #FFC107 75%); border:3px solid var(--wood); box-shadow:0 3px 0 #00000059;}
+#act{position:fixed; right:calc(var(--gxr) + 4px); bottom:calc(var(--gb) + 18px); z-index:5; font-size:1.05rem; padding:14px 18px; max-width:60vw;
+  animation:pulse 1.4s ease-in-out infinite;}
+@keyframes pulse{50%{box-shadow:inset 0 -4px 0 #00000033, 0 4px 0 var(--wood), 0 0 18px #FFC107;}}
+#keys{position:fixed; left:50%; transform:translateX(-50%); bottom:var(--gb); z-index:4; font-size:.8rem; color:#fff; background:#0E1430b3;
+  padding:6px 12px; border:2px solid #ffffff40; white-space:nowrap;}
+
+#toast{position:fixed; left:50%; top:calc(var(--gt) + 4px); transform:translateX(-50%); z-index:9; max-width:min(420px, calc(100vw - 32px));
+  font-weight:700; font-size:.88rem; padding:8px 14px; background:var(--night); color:#FFE082; border:2px solid var(--gold); text-align:center;}
+#toast.show{animation:toastIn 2.6s ease both;}
+@keyframes toastIn{0%{opacity:0; transform:translate(-50%,-10px);}10%,85%{opacity:1; transform:translate(-50%,0);}100%{opacity:0;}}
+
+#pop{position:fixed; inset:0; z-index:20; display:flex; align-items:center; justify-content:center; pointer-events:none;}
+#pop .card{padding:18px 26px; text-align:center; animation:popIn 1.9s ease both;}
+#pop .big{font-size:3.6rem; filter:drop-shadow(0 0 16px #FFC107);}
+#pop h3{color:#7A3E00; font-size:1.2rem;}
+@keyframes popIn{0%{transform:scale(.3); opacity:0;}15%{transform:scale(1.08); opacity:1;}25%,80%{transform:scale(1); opacity:1;}100%{transform:scale(.9); opacity:0;}}
+
+/* ---------- dialog ---------- */
+#dlg{position:fixed; left:0; right:0; bottom:0; z-index:10; padding-left:var(--gx); padding-right:var(--gxr); padding-bottom:var(--gb);
+  display:flex; justify-content:center;}
+.dlg-in{width:100%; max-width:560px; padding:14px 16px; max-height:62vh; overflow-y:auto; animation:rise .25s ease both;}
+@keyframes rise{from{transform:translateY(30px); opacity:0;}to{transform:none; opacity:1;}}
+.dlg-head{display:flex; align-items:center; gap:10px; margin-bottom:8px;}
+.portrait{width:44px; height:44px; flex:0 0 44px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:1.5rem;
+  background:#FFFBEF; border:3px solid; }
+.dn{font-family:var(--f-display); font-weight:700; font-size:1rem;}
+.dr{font-size:.78rem; color:var(--ink-soft); font-weight:600;}
+.dt{font-size:1rem; line-height:1.7; min-height:2.4em;}
+.dt.nar{font-style:italic; color:var(--ink-soft);}
+.dt .ask{display:block; margin-top:6px; font-weight:700; color:#7A3E00; font-style:normal;}
+.dc{display:grid; gap:8px; margin-top:10px;}
+.ch{text-align:left; cursor:pointer; font-size:.93rem; line-height:1.5; background:var(--panel); color:#EAF0FF; border:3px solid #0A0F22;
+  padding:10px 12px; display:flex; gap:10px; box-shadow:inset 0 0 0 2px #4FC3F759, 0 3px 0 #00000066;}
+.ch b{font-family:var(--f-display); color:var(--gold); flex:0 0 16px;}
+.ch:active{transform:translateY(2px);}
+.ch[disabled]{opacity:.4; cursor:default;}
+.ch.picked{opacity:1; box-shadow:inset 0 0 0 2px var(--gold), 0 0 10px #FFC10780;}
+.fb{margin-top:10px; border-left:6px solid; padding:8px 10px; background:#FFFBEF;}
+.fb.good{border-color:var(--good);} .fb.mid{border-color:var(--mid);} .fb.bad{border-color:var(--bad);}
+.fb-h{display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-bottom:4px;}
+.badge{font-family:var(--f-display); font-weight:700; font-size:.78rem; color:#fff; padding:2px 8px;}
+.good .badge{background:var(--good);} .mid .badge{background:var(--mid);} .bad .badge{background:var(--bad);}
+.delta{font-size:.76rem; font-weight:700; color:var(--ink-soft);}
+.fb p{font-size:.9rem; line-height:1.6;}
+.fb .best{margin-top:6px; font-size:.85rem; padding-top:6px; border-top:1px dashed var(--parch-edge);}
+.dnext{text-align:right; font-family:var(--f-display); font-size:.8rem; color:var(--gold-deep); margin-top:8px; cursor:pointer;}
+
+/* ---------- overlays ---------- */
+.ov{position:fixed; inset:0; z-index:30; display:flex; align-items:center; justify-content:center;
+  padding-left:var(--gx); padding-right:var(--gxr); padding-block:var(--gt) var(--gb); background:linear-gradient(180deg,#0E143099,#0E1430d9);}
+.ov .page{width:100%; max-width:440px; padding:22px 20px; text-align:center; display:flex; flex-direction:column; gap:12px; max-height:100%; overflow-y:auto;}
+.eyebrow{font-family:var(--f-display); letter-spacing:.12em; font-size:.75rem; color:var(--gold-deep);}
+.ov h1{font-size:1.9rem; color:#7A3E00;}
+.lede{font-size:.95rem; line-height:1.7;}
+.how{text-align:left; display:grid; gap:7px; font-size:.88rem; line-height:1.55; background:#FFFBEF; border:2px dashed var(--parch-edge); padding:10px 12px;}
+.how div{display:flex; gap:8px;}
+.how span:first-child{flex:0 0 22px; text-align:center;}
+.motto{font-family:var(--f-display); color:var(--gold-deep); font-size:.85rem; letter-spacing:.04em;}
+.end-medal{font-size:3.6rem; filter:drop-shadow(0 0 16px #FFC107e6); animation:popIn2 .7s cubic-bezier(.2,1.6,.4,1) both;}
+@keyframes popIn2{from{transform:scale(0) rotate(-20deg);}to{transform:none;}}
+.end-score{font-family:var(--f-display); font-size:2.1rem; font-variant-numeric:tabular-nums;}
+.end-score small{font-size:1rem; color:var(--ink-soft);}
+.review{text-align:left; display:grid; font-size:.84rem;}
+.review div{display:flex; gap:8px; padding:5px 0; border-bottom:1px dashed var(--parch-edge); line-height:1.45;}
+.review div:last-child{border-bottom:none;}
+.review b{flex:0 0 18px;}
+.row2{display:grid; grid-template-columns:1fr 1fr; gap:10px;}
+.homelink{font-size:.88rem; font-weight:700; color:var(--ink-soft);}
+#loading{font-family:var(--f-display); font-size:.85rem; color:var(--ink-soft);}
+
+@media (max-width:420px){
+  .ov h1{font-size:1.55rem;}
+  #obj{padding:8px 10px;}
+  .obj-text{font-size:.8rem;}
+}
+@media (prefers-reduced-motion: reduce){ *,*::before,*::after{animation:none !important; transition:none !important;} }
+</style>
+</head>
+<body>
+
+<canvas id="c" tabindex="0"></canvas>
+<div id="tags"></div>
+
+<div id="obj" class="page" hidden>
+  <span class="chip" id="chip">สวมบท</span>
+  <div class="obj-row">
+    <div class="obj-txt">
+      <div class="obj-title" id="otitle"></div>
+      <div class="obj-text" id="otext"></div>
+    </div>
+    <div class="compass" id="compass">
+      <svg id="arrow" viewBox="0 0 30 30" aria-hidden="true"><path d="M15 2 L26 26 L15 20 L4 26 Z" fill="#FFC107" stroke="#3E2810" stroke-width="2.2" stroke-linejoin="round"/></svg>
+      <span id="dist">–</span>
+    </div>
+  </div>
+  <div class="meters">
+    <div class="meter">❤️ ความไว้วางใจ<div class="bar"><div class="fill" id="mt" style="background:#EC407A"></div></div></div>
+    <div class="meter">🛡️ ความถูกต้อง<div class="bar"><div class="fill" id="ma" style="background:#0288D1"></div></div></div>
+  </div>
+  <div class="items" id="items"></div>
+</div>
+<canvas id="map" width="232" height="232" hidden></canvas>
+<div id="mapN" hidden>N ▲</div>
+
+<div id="joy" hidden><div id="knob"></div></div>
+<button class="btn" id="act" hidden>💬 คุย</button>
+<div id="keys" hidden>WASD / ลูกศร เดิน · Shift วิ่ง · ลากเมาส์หมุนกล้อง · E คุย</div>
+<div id="toast" hidden></div>
+<div id="pop" hidden></div>
+
+<div id="dlg" hidden>
+  <div class="dlg-in page" id="dlgIn">
+    <div class="dlg-head" id="dhead"><div class="portrait" id="dp"></div><div><div class="dn" id="dn"></div><div class="dr" id="dr"></div></div></div>
+    <div class="dt" id="dt"></div>
+    <div class="dc" id="dc"></div>
+    <div class="dnext" id="dnext">แตะเพื่อไปต่อ ▼</div>
+  </div>
+</div>
+
+<div class="ov" id="title">
+  <div class="page">
+    <div class="eyebrow">TZD HERO QUEST · 3D</div>
+    <h1>ตำบลธารทอง</h1>
+    <p class="lede">เดินสำรวจตำบลจำลอง พบผู้คน เคาะประตูบ้านเป้าหมาย แล้วสวมบทคณะทำงานทีละด่าน เพื่อพาน้อง ๆ กลับสู่เส้นทางการเรียน</p>
+    <div class="how" id="how"></div>
+    <button class="btn" id="start" disabled>กำลังสร้างตำบล…</button>
+    <p class="motto">1 คน · 1 เคส · 1 โอกาส</p>
+    <a class="homelink" href="./">← กลับหน้าแรก</a>
+  </div>
+</div>
+
+<div class="ov" id="end" hidden>
+  <div class="page" id="endIn"></div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+/* =====================================================================
+   CONTENT
+   ===================================================================== */
+const ROLE = {
+  admin:   {n:"แอดมิน · อัศวิน",         c:"#7B1FA2"},
+  surveyor:{n:"ผู้สำรวจ · นักสืบ",        c:"#00897B"},
+  cm:      {n:"CM · นักประดิษฐ์",         c:"#FF6F00"},
+  cms:     {n:"ประธาน CMS · ผู้พิทักษ์",   c:"#3949AB"},
+  chair:   {n:"ประธาน TZD · พระราชา",     c:"#2E7D32"},
+};
+const ITEMS = [
+  {i:"🗝️", n:"กุญแจ"}, {i:"🧭", n:"เข็มทิศ"}, {i:"🔍", n:"แว่นขยาย"},
+  {i:"🗺️", n:"แผนที่"}, {i:"🛡️", n:"ตราประทับ"}, {i:"👑", n:"มงกุฎ"},
+];
+// s: 2 ดีที่สุด / 1 พอใช้ / 0 ควรเลี่ยง ; t,a = ผลต่อความไว้วางใจ / ความถูกต้อง
+const CH = {
+  ACCOUNTS:{title:"ตั้งทีมในระบบ TZD", ask:"ท่านจะช่วยตั้งทีมตำบลอย่างไร?", c:[
+    {x:"ตั้งบัญชีให้ครบทุกบทบาท ชี้แจงหน้าที่ของแต่ละคน และให้ทุกคนทดลองเข้าใช้งาน", s:2,t:1,a:1,
+     fb:"ด่านแรกจะผ่านได้เมื่อทุกบทบาทมีบัญชีพร้อมใช้ การทดลองเข้าใช้ช่วยจับปัญหาก่อนลงพื้นที่จริง"},
+    {x:"ตั้งบัญชีของแอดมินก่อน คนอื่นค่อยทำเมื่อถึงคิวงาน", s:1,t:0,a:0,
+     fb:"งานจะสะดุดเมื่อถึงด่านถัดไป และคนที่ไม่ได้เตรียมตัวมักไม่พร้อมพอดี"},
+    {x:"ตั้งบัญชีเดียว แล้วแชร์รหัสให้ทั้งทีมใช้ร่วมกัน", s:0,t:-1,a:-2,
+     fb:"บัญชีร่วมทำให้ระบุไม่ได้ว่าใครทำอะไร และเสี่ยงต่อความปลอดภัยของข้อมูลเด็ก"},
+  ]},
+  SCREEN:{title:"คัดกรองรายชื่อ 120 ราย", ask:"ท่านจะจัดการรายชื่อนี้อย่างไร?", c:[
+    {x:"คัดกรองเบื้องต้นก่อน ตัดรายที่ยืนยันได้ว่าอยู่ในระบบการศึกษาหรือย้ายออกแล้ว เพื่อลงพื้นที่เฉพาะรายที่ต้องพิสูจน์", s:2,t:0,a:2,
+     fb:"การคัดกรองคือการล็อกเป้าหมาย ทำให้กำลังพลที่มีจำกัดไปถึงเด็กที่ต้องการความช่วยเหลือจริง"},
+    {x:"ส่งรายชื่อทั้ง 120 รายให้ผู้สำรวจไปตรวจทุกบ้าน", s:1,t:0,a:0,
+     fb:"ละเอียดแต่สิ้นแรง ผู้สำรวจจะหมดเวลาไปกับบ้านที่ไม่จำเป็น"},
+    {x:"เลือกเฉพาะบ้านที่อยู่ใกล้ เดินทางสะดวก", s:0,t:0,a:-2,
+     fb:"เด็กที่อยู่ไกลมักเปราะบางที่สุด การเลือกตามความสะดวกทำให้พวกเขาตกหล่น"},
+  ]},
+  CONSENT:{title:"ประตูที่ปิดอยู่ (บ้านน้องดาว)", ask:"ท่านจะเริ่มต้นอย่างไร?", c:[
+    {x:"แนะนำตัว อธิบายว่ามาเพื่อหาทางช่วยเหลือเด็ก ข้อมูลจะถูกเก็บรักษาตามกฎหมายคุ้มครองข้อมูลส่วนบุคคล แล้วขอความยินยอมก่อนถาม", s:2,t:2,a:0,
+     fb:"ความโปร่งใสและการขอความยินยอมคือกุญแจของการสำรวจ ครอบครัวที่เข้าใจเป้าหมายจะให้ข้อมูลที่จริงใจกว่า"},
+    {x:"ขอนัดใหม่วันหลัง แล้วเดินจากไปเพื่อไม่ให้กดดัน", s:1,t:0,a:0,
+     fb:"การเคารพความพร้อมเป็นเรื่องดี แต่ถ้าไม่อธิบายอะไรเลย ความระแวงจะยังอยู่ในครั้งหน้า"},
+    {x:"บอกว่าเป็นคำสั่งจากทางราชการ จำเป็นต้องให้ข้อมูล", s:0,t:-2,a:0,
+     fb:"การใช้อำนาจทำให้ครอบครัวปิดใจ และอาจให้ข้อมูลเพียงเพื่อให้จบ ๆ ไป"},
+  ]},
+  RECORD:{title:"ความจริงไม่ตรงทะเบียน (บ้านน้องฟ้า)", ask:"ท่านจะบันทึกอย่างไร?", c:[
+    {x:"บันทึกสถานะตามที่พบจริง พร้อมระบุเหตุผลและช่วงเวลาที่ขาดเรียนไว้ในแบบสำรวจ", s:2,t:0,a:2,
+     fb:"ภารกิจของนักสืบคือพิสูจน์ความจริง เด็กที่มีชื่อแต่ไม่ได้เรียนคือกลุ่มที่เสี่ยงหลุดจากการช่วยเหลือมากที่สุด"},
+    {x:"ยังไม่บันทึก รอโทรถามครูให้แน่ใจก่อน", s:1,t:0,a:0,
+     fb:"การตรวจสอบเพิ่มเป็นเรื่องดี แต่ควรบันทึกสิ่งที่พบไว้ก่อน แล้วเพิ่มข้อมูลจากครูทีหลัง"},
+    {x:"บันทึกว่าอยู่ในระบบการศึกษาตามทะเบียน เพราะเป็นข้อมูลทางการ", s:0,t:0,a:-2,
+     fb:"ข้อมูลทะเบียนอาจล้าสมัย ถ้าบันทึกตามนั้น น้องฟ้าจะหายไปจากการช่วยเหลือ"},
+  ]},
+  DANGER:{title:"สัญญาณอันตราย (บ้านน้องภู)", ask:"ท่านจะทำอย่างไร?", c:[
+    {x:"บันทึกสิ่งที่พบ แล้วแจ้งแอดมินตำบลหรือ CM ทันที เพื่อประสานหน่วยงานคุ้มครองเด็กอย่างเร่งด่วน โดยไม่เผชิญหน้ากับผู้ปกครองเอง", s:2,t:1,a:2,
+     fb:"ความปลอดภัยของเด็กมาก่อนทุกขั้นตอน การส่งต่อผ่านทีมไปยังผู้เชี่ยวชาญให้เร็วที่สุดคือทางที่ถูกต้อง"},
+    {x:"จดไว้ แล้วรอส่งไปพร้อมแบบสำรวจตามรอบปกติ", s:0,t:0,a:-1,
+     fb:"เรื่องความปลอดภัยรอไม่ได้ ระหว่างรอเด็กอาจอยู่ในอันตราย"},
+    {x:"ถามผู้ปกครองตรง ๆ ว่ารอยช้ำนั้นเกิดจากอะไร", s:0,t:-2,a:0,
+     fb:"การเผชิญหน้าอาจทำให้เด็กเสี่ยงมากขึ้นหลังทีมกลับไป ควรให้ผู้เชี่ยวชาญเป็นผู้ดำเนินการ"},
+  ]},
+  PRIVACY:{title:"ส่งนกพิราบสื่อสาร", ask:"ท่านจะส่งข้อมูลอย่างไร?", c:[
+    {x:"บันทึกข้อมูลและภาพผ่านระบบ TZD เท่านั้น แล้วตอบในกลุ่มเพียงว่าสำรวจเรียบร้อยแล้ว", s:2,t:1,a:1,
+     fb:"ข้อมูลเด็กเป็นข้อมูลอ่อนไหว ระบบ TZD เก็บอย่างปลอดภัยและให้เห็นเฉพาะผู้มีสิทธิ์"},
+    {x:"ส่งภาพทางไลน์ส่วนตัวให้แอดมิน แต่เบลอหน้าเด็กก่อน", s:1,t:0,a:0,
+     fb:"ระวังขึ้นกว่าเดิม แต่ข้อมูลยังหลุดออกนอกระบบ และควบคุมการส่งต่อไม่ได้"},
+    {x:"โพสต์ภาพในกลุ่มไลน์หมู่บ้าน ให้ทุกคนช่วยกันดู", s:0,t:-2,a:-1,
+     fb:"เป็นการละเมิดข้อมูลส่วนบุคคลของเด็ก และอาจทำให้เด็กถูกตีตราในชุมชน"},
+  ]},
+  APPROACH:{title:"ออกแบบเส้นทางของน้องฟ้า", ask:"ท่านจะออกแบบแนวทางอย่างไร?", c:[
+    {x:"รับฟังความต้องการของน้องและแม่ แล้วพิจารณาการเรียนรูปแบบยืดหยุ่นที่ทำควบคู่กับงานได้ พร้อมหาแหล่งช่วยเหลือด้านรายได้ครอบครัว", s:2,t:2,a:1,
+     fb:"แผนที่ดีออกแบบร่วมกับเด็กและครอบครัว และแก้ทั้งเรื่องการเรียนกับเรื่องปากท้องไปพร้อมกัน"},
+    {x:"หาทุนการศึกษาให้ แล้วให้น้องกลับไปเรียนตามปกติ", s:1,t:1,a:0,
+     fb:"ทุนช่วยได้บางส่วน แต่ถ้ารายได้ครอบครัวยังไม่พอ น้องอาจต้องกลับไปทำงานอีก"},
+    {x:"นำแผนของเคสที่คล้ายกันมาใช้ แก้แค่ชื่อเด็ก", s:0,t:-1,a:-2,
+     fb:"พาหนะที่ไม่ได้ออกแบบให้ตรงเส้นทางจะพังกลางทาง แผนช่วยเหลือของแต่ละคนห้ามก๊อปปี้วาง"},
+  ]},
+  RESOURCE:{title:"เขียนเสบียงลงแผน", ask:"ท่านจะเขียนความช่วยเหลือด้านอาชีพลงในแผนอย่างไร?", c:[
+    {x:"ระบุชื่อกลุ่มทอผ้า ผู้รับผิดชอบ สิ่งที่จะได้รับ และกรอบเวลาให้ชัดเจน", s:2,t:0,a:2,
+     fb:"ทรัพยากรที่ระบุว่าใคร ทำอะไร เมื่อไร ตรวจสอบได้ ทำให้ CMS พิจารณาง่ายและติดตามผลได้จริง"},
+    {x:"เลือกศูนย์ฝึกอาชีพชื่อดังในตัวจังหวัดแทน แม้จะอยู่ไกลจากบ้านน้อง", s:1,t:0,a:0,
+     fb:"บริการดีแต่เข้าถึงยาก ค่าเดินทางและเวลาอาจทำให้ครอบครัวไปไม่ได้"},
+    {x:"เขียนว่า “ส่งต่อหน่วยงานที่เกี่ยวข้อง” เพื่อให้ยืดหยุ่น", s:0,t:0,a:-2,
+     fb:"แผนที่ไม่ระบุผู้รับผิดชอบจะไม่มีใครลงมือ และ CMS จะตีกลับ"},
+  ]},
+  KICKBACK:{title:"แผนถูกตีกลับ", ask:"ท่านจะทำอย่างไรกับความเห็นของ CMS?", c:[
+    {x:"นำข้อเสนอแนะมาปรับแผน เพิ่มแหล่งสนับสนุนด้านรายได้ช่วงแรก แล้วส่งให้พิจารณาใหม่", s:2,t:1,a:2,
+     fb:"การตีกลับคือส่วนหนึ่งของการรับประกันคุณภาพ แผนที่ผ่านการปรับมักแข็งแรงกว่าเดิม"},
+    {x:"ลดเป้าหมายในแผนลง ให้เหลือเท่าที่ทรัพยากรมีอยู่", s:1,t:0,a:0,
+     fb:"แผนอาจผ่าน แต่ความช่วยเหลือจะไม่พอให้น้องไปถึงปลายทาง"},
+    {x:"ส่งแผนเดิมกลับไปอีกครั้ง พร้อมอธิบายว่าทำดีที่สุดแล้ว", s:0,t:-1,a:-1,
+     fb:"ปัญหาที่ CMS ชี้ยังอยู่ แผนจะถูกตีกลับซ้ำและเสียเวลาของเด็ก"},
+  ]},
+  FOLLOW:{title:"หลังพิธีแต่งตั้ง", ask:"ขั้นต่อไปของทีมคืออะไร?", c:[
+    {x:"ประสานการส่งต่อให้ครบ และนัดติดตามผลตามรอบ 3 เดือนและ 6 เดือน", s:2,t:1,a:2,
+     fb:"การอนุมัติไม่ใช่ปลายทาง การติดตามตามรอบช่วยจับปัญหาใหม่ได้ก่อนเด็กหลุดซ้ำ"},
+    {x:"ติดตามเฉพาะเมื่อมีคนแจ้งว่ามีปัญหา", s:1,t:0,a:-1,
+     fb:"ปัญหาส่วนใหญ่ไม่มีใครแจ้ง กว่าจะรู้อาจสายเกินไป"},
+    {x:"บันทึกว่าเสร็จสิ้นภารกิจ แล้วรับเคสใหม่", s:0,t:-1,a:-2,
+     fb:"การส่งต่อโดยไม่ติดตาม ทำให้ไม่รู้ว่าความช่วยเหลือไปถึงเด็กจริงหรือไม่"},
+  ]},
+};
+const MAXSCORE = Object.keys(CH).length * 2;
+const RANKS = [
+  {min:18, m:"👑", r:"ตำนานผู้กล้าแห่งตำบลธารทอง", t:"ท่านตัดสินใจได้เฉียบคมแทบทุกสถานการณ์ ทั้งรักษาความไว้วางใจของครอบครัวและความถูกต้องของงาน พร้อมเป็นพี่เลี้ยงให้ทีมตำบลอื่น"},
+  {min:14, m:"🛡️", r:"ผู้กล้าประจำเมือง", t:"ท่านเข้าใจหัวใจของภารกิจเป็นอย่างดี ทบทวนสถานการณ์ที่ยังไม่ได้คะแนนเต็มอีกเล็กน้อย ก็พร้อมลงสนามจริง"},
+  {min:9,  m:"🧭", r:"ผู้กล้าฝึกหัด", t:"ท่านมาถูกทางแล้ว อ่านคำอธิบายของสถานการณ์ที่พลาด แล้วลองเล่นอีกรอบ"},
+  {min:0,  m:"🌱", r:"ผู้เริ่มออกเดินทาง", t:"ทุกผู้กล้าเริ่มจากจุดนี้ ทบทวนคู่มือการดำเนินงาน TZD แล้วกลับมาท้าทายอีกครั้ง"},
+];
+
+/* =====================================================================
+   STATE
+   ===================================================================== */
+const S = { step:0, houses:{A:false,B:false,C:false}, res:{edu:false,health:false,econ:false},
+  score:0, trust:10, acc:10, log:[], items:[], started:false, ended:false };
+const METER_MAX = 20;
+const clamp = (v,a,b)=>Math.max(a,Math.min(b,v));
+
+/* =====================================================================
+   THREE SETUP
+   ===================================================================== */
+const canvas = document.getElementById("c");
+const renderer = new THREE.WebGLRenderer({canvas, antialias:true});
+renderer.setPixelRatio(Math.min(window.devicePixelRatio||1, 2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0xA8DAF0);
+scene.fog = new THREE.Fog(0xA8DAF0, 75, 175);
+const camera = new THREE.PerspectiveCamera(55, innerWidth/innerHeight, 0.1, 420);
+scene.add(new THREE.HemisphereLight(0xffffff, 0x5d7f3e, 0.62));
+const sun = new THREE.DirectionalLight(0xfff1d6, 0.92);
+sun.castShadow = true; sun.shadow.mapSize.set(2048,2048);
+Object.assign(sun.shadow.camera, {left:-34,right:34,top:34,bottom:-34,near:1,far:160});
+sun.shadow.bias = -0.0008;
+scene.add(sun); scene.add(sun.target);
+
+const matCache = {}, geoCache = {};
+function mat(c){ if (typeof c !== "string") return c; return matCache[c] || (matCache[c] = new THREE.MeshPhongMaterial({color:c, flatShading:true, shininess:6})); }
+function boxGeo(w,h,d){ const k=w+"|"+h+"|"+d; return geoCache[k] || (geoCache[k] = new THREE.BoxGeometry(w,h,d)); }
+function box(p,w,h,d,c,x,y,z,o={}){
+  const m = new THREE.Mesh(boxGeo(w,h,d), mat(c));
+  m.position.set(x,y,z); if(o.ry) m.rotation.y=o.ry; if(o.rx) m.rotation.x=o.rx; if(o.rz) m.rotation.z=o.rz;
+  m.castShadow = o.cast!==false; m.receiveShadow = true; p.add(m); return m;
+}
+function cyl(p,rt,rb,h,c,x,y,z,seg=8){
+  const k="c"+rt+"|"+rb+"|"+h+"|"+seg; const g = geoCache[k] || (geoCache[k]=new THREE.CylinderGeometry(rt,rb,h,seg));
+  const m = new THREE.Mesh(g, mat(c)); m.position.set(x,y,z); m.castShadow=true; m.receiveShadow=true; p.add(m); return m;
+}
+function gable(p,w,h,d,c,x,y,z,ry=0){
+  const s = new THREE.Shape(); s.moveTo(-w/2,0); s.lineTo(w/2,0); s.lineTo(0,h); s.lineTo(-w/2,0);
+  const g = new THREE.ExtrudeGeometry(s,{depth:d, bevelEnabled:false}); g.translate(0,0,-d/2);
+  const m = new THREE.Mesh(g, mat(c)); m.position.set(x,y,z); m.rotation.y=ry; m.castShadow=true; m.receiveShadow=true; p.add(m); return m;
+}
+function hip(p,w,h,d,c,x,y,z){
+  const g = new THREE.ConeGeometry(0.7071,1,4); g.rotateY(Math.PI/4); g.translate(0,0.5,0);
+  const m = new THREE.Mesh(g, mat(c)); m.scale.set(w,h,d); m.position.set(x,y,z); m.castShadow=true; p.add(m); return m;
+}
+
+/* ---------- colliders & minimap features ---------- */
+const COL = [], FEAT = [], OCC = [];
+function colBox(cx,cz,w,d){ COL.push({t:"b",x0:cx-w/2,x1:cx+w/2,z0:cz-d/2,z1:cz+d/2}); }
+function colCirc(x,z,r){ COL.push({t:"c",x,z,r}); }
+function feat(x,z,w,d,c){ FEAT.push({x,z,w,d,c}); }
+const BOUND = {x0:-56,x1:56,z0:-40,z1:56};
+function resolve(p,r){
+  for (const c of COL){
+    if (c.t==="c"){
+      const dx=p.x-c.x, dz=p.z-c.z, d=Math.hypot(dx,dz), m=c.r+r;
+      if (d<m && d>1e-4){ p.x=c.x+dx/d*m; p.z=c.z+dz/d*m; }
+    } else {
+      const qx=clamp(p.x,c.x0,c.x1), qz=clamp(p.z,c.z0,c.z1), dx=p.x-qx, dz=p.z-qz, d=Math.hypot(dx,dz);
+      if (d<r){
+        if (d>1e-4){ p.x=qx+dx/d*r; p.z=qz+dz/d*r; }
+        else { const l=p.x-c.x0, rr=c.x1-p.x, t=p.z-c.z0, b=c.z1-p.z, mn=Math.min(l,rr,t,b);
+          if(mn===l)p.x=c.x0-r; else if(mn===rr)p.x=c.x1+r; else if(mn===t)p.z=c.z0-r; else p.z=c.z1+r; }
+      }
+    }
+  }
+  p.x=clamp(p.x,BOUND.x0,BOUND.x1); p.z=clamp(p.z,BOUND.z0,BOUND.z1);
+}
+
+/* ---------- text sprites ---------- */
+const LABELS=[];
+function label(text,{h=1, bg="rgba(62,40,16,.9)", fg="#FFE082", border="#FFC107", top=false}={}){
+  const anchor=new THREE.Object3D();
+  const el=document.createElement("div"); el.className="tag3d"; el.textContent=text;
+  el.style.background=bg; el.style.color=fg; el.style.borderColor=border;
+  el.style.fontSize=(13+h*4).toFixed(1)+"px";
+  document.getElementById("tags").appendChild(el);
+  LABELS.push({anchor, el, far: top?18:48});
+  return anchor;
+}
+const _lp=new THREE.Vector3();
+function updateLabels(){
+  const W=innerWidth, H=innerHeight;
+  for (const L of LABELS){
+    let vis=S.started, o=L.anchor;
+    while (o && vis){ if (!o.visible) vis=false; o=o.parent; }
+    if (!L.anchor.parent) vis=false;
+    if (vis){
+      L.anchor.getWorldPosition(_lp);
+      const d=_lp.distanceTo(camera.position);
+      if (d>L.far) vis=false;
+      else { _lp.project(camera); if (_lp.z>1 || Math.abs(_lp.x)>1.2 || Math.abs(_lp.y)>1.2) vis=false;
+        else { const sc=clamp(14/d,.88,1.15);
+          L.el.style.transform=`translate(${(_lp.x*.5+.5)*W}px,${(-_lp.y*.5+.5)*H}px) translate(-50%,-100%) scale(${sc.toFixed(3)})`; } }
+    }
+    if (L.shown!==vis){ L.el.style.display=vis?"block":"none"; L.shown=vis; }
+  }
+}
+
+/* ---------- people ---------- */
+function person({shirt, pants="#37474F", skin="#D9A273", hair="#24180F", kid=false, robe=false, hat=null, hatColor="#D4B26A"}){
+  const g = new THREE.Group(), body = new THREE.Group(); body.scale.setScalar(kid?0.72:1); g.add(body);
+  const mk = (x)=>{ const L=new THREE.Group(); L.position.set(x,0.72,0); box(L,.22,.72,.24,pants,0,-.36,0); body.add(L); return L; };
+  const legL=mk(-.15), legR=mk(.15);
+  box(body,.62,.74,.36,shirt,0,1.09,0);
+  if (robe) box(body,.66,.86,.4,shirt,0,.62,0);
+  const arm=(x)=>{ const A=new THREE.Group(); A.position.set(x,1.4,0); box(A,.18,.6,.2,shirt,0,-.28,0); box(A,.15,.15,.17,skin,0,-.64,0); body.add(A); return A; };
+  const armL=arm(-.42), armR=arm(.42);
+  box(body,.46,.46,.44,skin,0,1.72,0);
+  box(body,.08,.08,.02,"#1b1b1b",-.1,1.75,.225,{cast:false}); box(body,.08,.08,.02,"#1b1b1b",.1,1.75,.225,{cast:false});
+  if (hair) { box(body,.5,.15,.48,hair,0,1.99,0); box(body,.5,.32,.1,hair,0,1.82,-.2); }
+  if (hat==="straw"){ const h=new THREE.Mesh(new THREE.ConeGeometry(.62,.36,8), mat(hatColor)); h.position.set(0,2.14,0); h.castShadow=true; body.add(h); }
+  if (hat==="wizard"){ const h=new THREE.Mesh(new THREE.ConeGeometry(.3,.75,8), mat(hatColor)); h.position.set(0,2.36,0); h.castShadow=true; body.add(h);
+    box(body,.62,.05,.6,hatColor,0,2.02,0); }
+  if (hat==="crown"){ for(let i=0;i<5;i++){ const a=i/5*Math.PI*2; box(body,.1,.18,.1,"#FFC107",Math.sin(a)*.2,2.12,Math.cos(a)*.2); } box(body,.48,.06,.46,"#FFC107",0,2.04,0); }
+  if (hat==="cap"){ box(body,.5,.12,.5,hatColor,0,2.04,0); }
+  if (hat==="helmet"){ box(body,.52,.16,.5,hatColor,0,2.03,0); box(body,.06,.22,.06,"#FFC107",0,2.2,0); }
+  g.userData = {legL,legR,armL,armR,body};
+  return g;
+}
+function animWalk(p, ph, amt){
+  const u=p.userData, a=Math.sin(ph)*0.75*amt;
+  u.legL.rotation.x=a; u.legR.rotation.x=-a; u.armL.rotation.x=-a*.8; u.armR.rotation.x=a*.8;
+  u.body.position.y = Math.abs(Math.sin(ph))*0.06*amt;
+}
+
+
+/* ---------- the six heroes (voxel versions of the Hero Quest cast) ---------- */
+function hero(type, sashMat){
+  const g=new THREE.Group(), body=new THREE.Group(); g.add(body);
+  const L={
+    wizard:   {skin:"#F1C9A5", top:"#3F6FD1", legs:"#3F6FD1", boots:"#2B3F75", hair:"#F2F2F2"},
+    knight:   {skin:"#AFB9C6", top:"#AFB9C6", legs:"#8C96A3", boots:"#6B7480", hair:null},
+    detective:{skin:"#E8B98F", top:"#B89B6E", legs:"#7A6046", boots:"#4A3220", hair:"#3E2810"},
+    inventor: {skin:"#E0AC7E", top:"#EDE7DC", legs:"#6D4C41", boots:"#3E2723", hair:"#6D4321"},
+    guardian: {skin:"#F1C9A5", top:"#C9A13B", legs:"#9AA4B1", boots:"#8A6A1F", hair:"#C68A3C"},
+    king:     {skin:"#E8B98F", top:"#2D4E9A", legs:"#1F3466", boots:"#5D3A1A", hair:"#6D4321"},
+  }[type];
+  const leg=x=>{ const G=new THREE.Group(); G.position.set(x,.6,0); box(G,.24,.48,.26,L.legs,0,-.24,0); box(G,.28,.14,.34,L.boots,0,-.53,.03); body.add(G); return G; };
+  const legL=leg(-.16), legR=leg(.16);
+  box(body,.7,.62,.42,L.top,0,.91,0);
+  const arm=x=>{ const G=new THREE.Group(); G.position.set(x,1.15,0); box(G,.2,.5,.22,type==="knight"?"#9AA4B1":L.top,0,-.22,0); box(G,.17,.16,.18,type==="knight"?"#8C96A3":L.skin,0,-.53,0); body.add(G); return G; };
+  const armL=arm(-.46), armR=arm(.46);
+  box(body,.6,.58,.56,L.skin,0,1.52,0);
+  const eyes=c=>{ box(body,.09,.11,.02,c,-.13,1.54,.285,{cast:false}); box(body,.09,.11,.02,c,.13,1.54,.285,{cast:false}); };
+  if (L.hair){ box(body,.64,.12,.6,L.hair,0,1.84,0); box(body,.64,.36,.12,L.hair,0,1.64,-.24); box(body,.06,.3,.5,L.hair,-.31,1.62,-.02); box(body,.06,.3,.5,L.hair,.31,1.62,-.02); }
+
+  if (type==="wizard"){
+    eyes("#1b1b1b"); box(body,.2,.05,.03,"#FFFFFF",-.13,1.64,.29,{cast:false}); box(body,.2,.05,.03,"#FFFFFF",.13,1.64,.29,{cast:false});
+    box(body,.8,.62,.48,"#3F6FD1",0,.31,0); box(body,.72,.08,.44,"#7B4A21",0,.72,0);
+    box(body,.52,.52,.14,"#F4F4F4",0,1.25,.3); box(body,.42,.09,.06,"#F4F4F4",0,1.42,.3);
+    box(body,.88,.06,.88,"#2E56A8",0,1.86,0);
+    const c=new THREE.Mesh(new THREE.ConeGeometry(.36,.95,8), mat("#3F6FD1")); c.position.set(.04,2.34,0); c.rotation.z=-.18; c.castShadow=true; body.add(c);
+    cyl(armR,.04,.05,1.9,"#6D4521",0,-.3,.12,6);
+    const orb=new THREE.Mesh(new THREE.SphereGeometry(.14,10,8), new THREE.MeshPhongMaterial({color:0x7FDBFF, emissive:0x2A9BD6})); orb.position.set(0,.72,.12); armR.add(orb);
+  }
+  if (type==="knight"){
+    box(body,.66,.64,.62,"#B8C2CE",0,1.53,0);
+    box(body,.48,.08,.02,"#1b1b1b",0,1.56,.315,{cast:false}); box(body,.04,.18,.02,"#1b1b1b",0,1.44,.315,{cast:false});
+    box(body,.14,.34,.16,"#C62828",0,1.98,-.02); box(body,.14,.16,.36,"#C62828",0,2.1,-.2); box(body,.14,.2,.14,"#C62828",0,1.98,-.38);
+    box(body,.74,.18,.46,"#9AA4B1",0,1.16,0);
+    box(body,.68,.95,.06,"#B71C1C",0,.78,-.25);
+    const sh=new THREE.Group(); sh.position.set(-.06,-.34,.24); armL.add(sh);
+    box(sh,.6,.7,.08,"#5B7FB5",0,0,0); box(sh,.66,.08,.1,"#B8C2CE",0,.35,0); box(sh,.66,.08,.1,"#B8C2CE",0,-.35,0);
+    box(sh,.32,.08,.04,"#FFC107",0,0,.06,{cast:false}); box(sh,.08,.32,.04,"#FFC107",0,0,.06,{cast:false}); box(sh,.16,.16,.04,"#FFC107",0,0,.06,{cast:false,rz:Math.PI/4});
+  }
+  if (type==="detective"){
+    eyes("#1b1b1b");
+    box(body,.86,.05,.86,"#7A5230",0,1.86,0); box(body,.52,.26,.52,"#7A5230",0,2.01,0); box(body,.54,.07,.54,"#3E2810",0,1.92,0);
+    box(body,.5,.6,.26,"#8B6A3E",0,.95,-.34); box(body,.4,.2,.04,"#6D4C2A",0,.85,-.48,{cast:false});
+    const roll=cyl(body,.11,.11,.58,"#556B2F",0,1.32,-.34,8); roll.rotation.z=Math.PI/2;
+    if (sashMat) box(body,.13,.86,.46,sashMat,0,.92,0,{rz:.62});
+    box(armR,.05,.26,.05,"#5D3A1A",0,-.72,.06);
+    const ring=new THREE.Mesh(new THREE.TorusGeometry(.14,.035,6,14), mat("#C9A13B")); ring.position.set(0,-.98,.06); armR.add(ring);
+    const lens=new THREE.Mesh(new THREE.CylinderGeometry(.12,.12,.02,14), new THREE.MeshPhongMaterial({color:0xBFE9FF, transparent:true, opacity:.6})); lens.rotation.x=Math.PI/2; lens.position.set(0,-.98,.06); armR.add(lens);
+  }
+  if (type==="inventor"){
+    eyes("#1b1b1b");
+    box(body,.56,.24,.1,L.hair,0,1.32,.28); box(body,.36,.06,.04,L.hair,0,1.42,.3);
+    box(body,.66,.08,.62,"#4E342E",0,1.74,0);
+    for (const x of [-.14,.14]){ const r=cyl(body,.11,.11,.08,"#B8860B",x,1.75,.32,10); r.rotation.x=Math.PI/2;
+      const l=cyl(body,.08,.08,.09,"#4FC3F7",x,1.75,.33,10); l.rotation.x=Math.PI/2; }
+    box(body,.6,.62,.04,"#7A4E2D",0,.84,.23); box(body,.76,.1,.46,"#5D4037",0,.64,0);
+    box(body,.12,.14,.06,"#9E9E9E",-.25,.6,.24); box(body,.1,.16,.06,"#FFB300",.24,.6,.24);
+    box(armR,.06,.42,.06,"#9E9E9E",0,-.74,.08); box(armR,.18,.1,.06,"#9E9E9E",0,-.96,.08);
+    const gear=cyl(armL,.19,.19,.07,"#9E9E9E",0,-.62,.16,10); gear.rotation.x=Math.PI/2;
+    for (let i=0;i<5;i++){ const a=i/5*Math.PI*2; box(armL,.07,.07,.07,"#9E9E9E",Math.sin(a)*.22,-.62+Math.cos(a)*.22,.16); }
+  }
+  if (type==="guardian"){
+    eyes("#1b1b1b");
+    box(body,.66,.26,.62,"#D4AF37",0,1.8,0); box(body,.08,.42,.5,"#D4AF37",-.33,1.56,-.02); box(body,.08,.42,.5,"#D4AF37",.33,1.56,-.02);
+    box(body,.08,.08,.08,"#C62828",0,1.86,.31,{cast:false});
+    box(body,.06,.34,.4,"#FAFAFA",-.42,1.92,-.08,{rz:.5}); box(body,.06,.34,.4,"#FAFAFA",.42,1.92,-.08,{rz:-.5});
+    box(body,.06,.24,.3,"#FAFAFA",-.5,2.1,-.14,{rz:.7}); box(body,.06,.24,.3,"#FAFAFA",.5,2.1,-.14,{rz:-.7});
+    box(body,.3,.18,.5,"#B8C2CE",-.44,1.2,0); box(body,.3,.18,.5,"#B8C2CE",.44,1.2,0);
+    box(body,.62,.85,.06,"#A31515",0,.8,-.25);
+    box(body,.18,.18,.03,"#FFFFFF",0,.98,.225,{cast:false,rz:Math.PI/4});
+    const sc=cyl(armL,.06,.06,.5,"#E8D49A",0,-.52,.2,8); sc.rotation.z=Math.PI/2;
+    box(armL,.42,.5,.03,"#F7EBC8",0,-.78,.2);
+    for (let i=0;i<3;i++) box(armL,.24,.04,.02,i<2?"#43A047":"#8D6E63",.02,-.66-i*.11,.225,{cast:false});
+  }
+  if (type==="king"){
+    eyes("#1b1b1b");
+    box(body,.6,.32,.12,L.hair,0,1.32,.28); box(body,.4,.07,.05,L.hair,0,1.43,.3);
+    box(body,.64,.12,.6,"#FFC107",0,1.9,0);
+    for (const [x,z] of [[-.27,.25],[.27,.25],[-.27,-.25],[.27,-.25],[0,.27],[0,-.27]]) box(body,.11,.2,.11,"#FFC107",x,2.04,z);
+    box(body,.1,.1,.04,"#D32F2F",0,1.92,.31,{cast:false});
+    box(body,.8,1.05,.06,"#B71C1C",0,.74,-.25);
+    box(body,.84,.18,.52,"#FAFAFA",0,1.2,0);
+    for (const x of [-.3,-.1,.1,.3]) box(body,.05,.05,.02,"#212121",x,1.2,.265,{cast:false});
+    box(body,.72,.09,.44,"#FFC107",0,.72,0); box(body,.1,.5,.02,"#FFC107",0,.95,.215,{cast:false});
+  }
+  g.userData={legL,legR,armL,armR,body};
+  return g;
+}
+
+/* ---------- markers ---------- */
+function marker(h){
+  const g=new THREE.Group(); g.position.y=h;
+  const gem=new THREE.Mesh(new THREE.OctahedronGeometry(.3,0), new THREE.MeshPhongMaterial({color:0xFFC107, emissive:0x8a5a00, flatShading:true}));
+  g.add(gem);
+  const ring=new THREE.Mesh(new THREE.RingGeometry(.75,1,28), new THREE.MeshBasicMaterial({color:0xFFC107, transparent:true, opacity:.65, side:THREE.DoubleSide, depthWrite:false}));
+  ring.rotation.x=-Math.PI/2; ring.position.y=-h+0.06; g.add(ring);
+  g.userData={gem,ring}; g.visible=false; return g;
+}
+
+/* =====================================================================
+   WORLD
+   ===================================================================== */
+let rng = (function(a){ return function(){ a|=0; a=a+0x6D2B79F5|0; let t=Math.imul(a^a>>>15,1|a); t=t+Math.imul(t^t>>>7,61|t)^t; return ((t^t>>>14)>>>0)/4294967296; }; })(20260425);
+const NPC = {};
+let flag, clouds=[], buffaloHead;
+
+function thaiHouse(x,z,ry,{wall="#8D5A2B", roof="#B5402B", lbl=null}={}){
+  const g=new THREE.Group(); g.position.set(x,0,z); g.rotation.y=ry; scene.add(g); OCC.push(g);
+  for (const px of [-2,2]) for (const pz of [-1.6,1.6]) box(g,.26,1.5,.26,"#5D3A1A",px,.75,pz);
+  box(g,4.9,.22,4.1,"#6D4521",0,1.55,0);
+  box(g,4.2,2.1,3.4,wall,0,2.7,0);
+  box(g,.9,1.6,.06,"#3E2810",0,2.45,1.72,{cast:false});
+  box(g,.7,.6,.06,"#FFE9B0",-1.35,2.85,1.72,{cast:false}); box(g,.7,.6,.06,"#FFE9B0",1.35,2.85,1.72,{cast:false});
+  gable(g,5.5,2.5,4.7,roof,0,3.74,0);
+  box(g,1.1,.18,.5,"#6D4521",0,1.15,2.3); box(g,1.1,.18,.5,"#6D4521",0,.75,2.75); box(g,1.1,.18,.5,"#6D4521",0,.35,3.2);
+  box(g,1.6,.5,.7,"#6E8B3D",2.9,.25,1.6); // ไม้กระถาง
+  const rot = Math.abs(Math.sin(ry))>0.5;
+  colBox(x,z, rot?4.4:5, rot?5:4.4);
+  feat(x,z, rot?4.6:5.4, rot?5.4:4.6, roof);
+  if (lbl){ const l=label(lbl,{h:.9}); l.position.set(x,7,z); scene.add(l); }
+  return g;
+}
+
+function buildWorld(){
+  // ground
+  const ground=new THREE.Mesh(new THREE.PlaneGeometry(340,340), mat("#79A947"));
+  ground.rotation.x=-Math.PI/2; ground.receiveShadow=true; scene.add(ground);
+
+  // river beyond the north edge
+  const river=new THREE.Mesh(new THREE.PlaneGeometry(340,10), new THREE.MeshPhongMaterial({color:0x4FA3D9, shininess:60}));
+  river.rotation.x=-Math.PI/2; river.position.set(0,.05,-47); scene.add(river);
+  box(scene,340,.3,1.2,"#A38A5C",0,.1,-41.6,{cast:false}); box(scene,340,.3,1.2,"#A38A5C",0,.1,-52.4,{cast:false});
+  feat(0,-47,240,10,"#4FA3D9");
+
+  // roads
+  box(scene,112,.06,5,"#5E6166",0,.03,0,{cast:false}); feat(0,0,112,5,"#6b6e73");
+  box(scene,5,.06,96,"#5E6166",0,.031,8,{cast:false}); feat(0,8,5,96,"#6b6e73");
+  for (let x=-54;x<=54;x+=4) if (Math.abs(x)>3) box(scene,1.6,.07,.18,"#F4F1E1",x,.04,0,{cast:false});
+  for (let z=-38;z<=54;z+=4) if (Math.abs(z)>3) box(scene,.18,.07,1.6,"#F4F1E1",0,.041,z,{cast:false});
+  const dirt="#C9B28A";
+  const path=(x,z,w,d)=>{ box(scene,w,.05,d,dirt,x,.025,z,{cast:false}); feat(x,z,w,d,dirt); };
+  path(-16,-8.5,3,12); path(18,-9,3,13); path(-18,8,3,12); path(24,7.5,3,11); path(5.8,34,7,3); path(-5,28,5,16);
+  box(scene,12,.07,7,"#D9CFC0",24,.035,15,{cast:false}); feat(24,15,12,7,"#D9CFC0");
+
+  // power poles
+  for (let x=-50;x<=50;x+=12){ if(Math.abs(x)<4) continue; cyl(scene,.12,.15,6,"#9E9E9E",x,3,-3.4,6); box(scene,1.6,.12,.12,"#9E9E9E",x,5.6,-3.4); colCirc(x,-3.4,.25); }
+
+  /* ----- อบต. ----- */
+  { const g=new THREE.Group(); g.position.set(-16,0,-20); scene.add(g); OCC.push(g);
+    box(g,13,6,7,"#F2F2EE",0,3,0); box(g,13.06,.45,7.06,"#1565C0",0,3.1,0);
+    for (let x=-5;x<=5;x+=2.5){ if(Math.abs(x)<1) continue; box(g,1.2,1,.06,"#5C8FC7",x,1.7,3.52,{cast:false}); box(g,1.2,1,.06,"#5C8FC7",x,4.4,3.52,{cast:false}); }
+    box(g,1.2,1,.06,"#5C8FC7",0,4.4,3.52,{cast:false});
+    box(g,2,2.4,.08,"#6D4C41",0,1.2,3.54,{cast:false});
+    box(g,4.2,.3,2.2,"#E0E0E0",0,2.8,4.5); cyl(g,.15,.15,2.8,"#E0E0E0",-1.8,1.4,5.4,8); cyl(g,.15,.15,2.8,"#E0E0E0",1.8,1.4,5.4,8);
+    hip(g,14,2.6,8,"#1E5AA8",0,6,0);
+    colBox(-16,-20,13,7); colBox(-16,-15,4.2,2.2); feat(-16,-20,13,7,"#1E5AA8");
+    const l=label("อบต.ธารทอง",{h:1.3}); l.position.set(-16,10,-20); scene.add(l);
+    // flag
+    cyl(scene,.08,.1,8,"#E0E0E0",-8.5,4,-14,8); colCirc(-8.5,-14,.3);
+    const fc=document.createElement("canvas"); fc.width=60; fc.height=36; const fx=fc.getContext("2d");
+    [["#A51931",0,6],["#F4F5F8",6,6],["#2D2A4A",12,12],["#F4F5F8",24,6],["#A51931",30,6]].forEach(([c,y,h])=>{fx.fillStyle=c; fx.fillRect(0,y,60,h);});
+    flag=new THREE.Mesh(new THREE.PlaneGeometry(2.2,1.3,8,1), new THREE.MeshLambertMaterial({map:new THREE.CanvasTexture(fc), side:THREE.DoubleSide}));
+    flag.position.set(-7.35,7.2,-14); scene.add(flag); flag.userData.base=flag.geometry.attributes.position.array.slice();
+  }
+
+  /* ----- โรงเรียน ----- */
+  { const g=new THREE.Group(); g.position.set(18,0,-19); scene.add(g); OCC.push(g);
+    box(g,16,3.6,5,"#F3E3B5",0,1.8,0); box(g,16.05,.35,5.05,"#E07B39",0,.18,0);
+    for (let x=-6.5;x<=6.5;x+=2.6) box(g,1.3,1.1,.06,"#6FA8DC",x,2,2.52,{cast:false});
+    box(g,1.4,2.2,.08,"#7B4A2A",-0.2,1.1,2.54,{cast:false});
+    gable(g,6.4,2.2,17,"#D9622B",0,3.6,0,Math.PI/2);
+    colBox(18,-19,16,5); feat(18,-19,16,5,"#D9622B");
+    const l=label("โรงเรียนบ้านธารทอง",{h:1.1}); l.position.set(18,7.6,-19); scene.add(l);
+    cyl(scene,.07,.09,7,"#E0E0E0",9,3.5,-14.5,8); colCirc(9,-14.5,.3);
+    box(scene,14,.04,7.5,"#9CCB5E",30,.02,-9.5,{cast:false}); feat(30,-9.5,14,7.5,"#9CCB5E");
+    for (const gx of [23.4,36.6]){ box(scene,.12,1.6,.12,"#fff",gx,.8,-11); box(scene,.12,1.6,.12,"#fff",gx,.8,-8); box(scene,.12,.12,3.1,"#fff",gx,1.6,-9.5); }
+  }
+
+  /* ----- รพ.สต. ----- */
+  { const g=new THREE.Group(); g.position.set(-18,0,19); scene.add(g); OCC.push(g);
+    box(g,9,3.2,6,"#FAFAFA",0,1.6,0); box(g,9.05,.4,6.05,"#43A047",0,2.6,0);
+    box(g,1.8,2.2,.08,"#81C784",0,1.1,-3.04,{cast:false});
+    box(g,1.2,.9,.06,"#90CAF9",-2.8,1.7,-3.03,{cast:false}); box(g,1.2,.9,.06,"#90CAF9",2.8,1.7,-3.03,{cast:false});
+    hip(g,10,1.9,7,"#2E7D32",0,3.2,0);
+    colBox(-18,19,9,6); feat(-18,19,9,6,"#2E7D32");
+    const l=label("✚ รพ.สต.ธารทอง",{h:1.1, bg:"rgba(255,255,255,.95)", fg:"#2E7D32", border:"#2E7D32"}); l.position.set(-18,6.6,19); scene.add(l);
+  }
+
+  /* ----- ศาลาประชาคม ----- */
+  { const g=new THREE.Group(); g.position.set(9,0,10); scene.add(g); OCC.push(g);
+    box(g,7.4,.35,5.8,"#BCAAA4",0,.17,0);
+    for (const px of [-3.2,0,3.2]) for (const pz of [-2.5,2.5]){ cyl(g,.16,.16,3,"#8D6E63",px,1.6,pz,8); colCirc(9+px,10+pz,.3); }
+    gable(g,6.6,2.1,8.6,"#BF360C",0,3.1,0,Math.PI/2);
+    box(g,.12,.12,8.8,"#FFC107",0,5.2,0,{ry:Math.PI/2});
+    feat(9,10,7.4,5.8,"#BF360C");
+    const l=label("ศาลาประชาคม",{h:1}); l.position.set(9,6.6,10); scene.add(l);
+  }
+
+  /* ----- กลุ่มทอผ้า ----- */
+  { const stall=(z,c1,c2)=>{ const g=new THREE.Group(); g.position.set(-8.5,0,z); scene.add(g);
+      for (const px of [-1.4,1.4]) for (const pz of [-1,1]) box(g,.12,2.4,.12,"#795548",px,1.2,pz);
+      box(g,2.9,.9,1.1,"#8D6E63",0,.45,.2);
+      for (let i=0;i<6;i++) box(g,.42,.5,.03,i%2?c1:c2,-1.3+i*.52,2.05,.95,{rz:.3});
+      for (let i=0;i<5;i++) box(g,.6,.12,1.6,i%2?c1:c2,-1.2+i*.6,2.5+(i%2)*.04,0,{rx:-.18});
+      for (let i=0;i<4;i++) box(g,.5,.25,.5,["#AD1457","#00838F","#F9A825","#6A1B9A"][i],-1+i*.65,1.03,.2);
+      colBox(-8.5,z+.2,2.9,1.2); feat(-8.5,z,3,2.2,c1); };
+    stall(22,"#E53935","#FFF59D"); stall(27,"#1E88E5","#FFFFFF"); stall(32,"#8E24AA","#FFD54F");
+    const l=label("กลุ่มทอผ้าบ้านธารทอง",{h:.95}); l.position.set(-8.5,4.4,27); scene.add(l);
+  }
+
+  /* ----- วัด ----- */
+  { const g=new THREE.Group(); g.position.set(24,0,26); g.rotation.y=Math.PI; scene.add(g); OCC.push(g);
+    box(g,9,.8,13,"#EEE8DC",0,.4,0); box(g,4,.4,1.4,"#E0D8C8",0,.2,7.1);
+    box(g,6.4,3.2,10.4,"#F7F3EA",0,2.4,0);
+    for (const px of [-2.4,-.8,.8,2.4]) cyl(g,.2,.22,3.2,"#F7F3EA",px,2.4,5.6,8);
+    box(g,1.6,2.4,.08,"#B8860B",0,2,5.22,{cast:false});
+    gable(g,8.2,3,12.4,"#B71C1C",0,4,0);
+    gable(g,5.8,2.4,9.2,"#D84315",0,5,0);
+    box(g,.16,.16,9.4,"#FFC107",0,7.42,0);
+    for (const pz of [-4.7,4.7]){ const ch=new THREE.Mesh(new THREE.ConeGeometry(.16,1.1,6), mat("#FFC107")); ch.position.set(0,7.9,pz); ch.rotation.x=pz>0?-.5:.5; g.add(ch); }
+    colBox(24,26,9,13); feat(24,26,9,13,"#B71C1C");
+    const l=label("วัดธารทอง",{h:1.1}); l.position.set(24,10.4,26); scene.add(l);
+    // เจดีย์
+    const c=new THREE.Group(); c.position.set(33,0,31); scene.add(c);
+    cyl(c,2.3,2.5,1,"#F5F1E6",0,.5,0,10); cyl(c,1.8,2,1,"#F5F1E6",0,1.5,0,10);
+    const bell=new THREE.Mesh(new THREE.SphereGeometry(1.5,10,8), mat("#F5F1E6")); bell.position.set(0,2.7,0); bell.scale.y=1.1; bell.castShadow=true; c.add(bell);
+    const sp=new THREE.Mesh(new THREE.ConeGeometry(.7,4.6,10), mat("#E0A800")); sp.position.set(0,6.2,0); sp.castShadow=true; c.add(sp);
+    colCirc(33,31,2.6); feat(33,31,5,5,"#F5F1E6");
+  }
+
+  /* ----- บ้านเป้าหมาย + บ้านประดับ ----- */
+  thaiHouse(-38,9,Math.PI,{wall:"#9C6B3C", roof:"#2F6FB3", lbl:"บ้านน้องดาว"});
+  thaiHouse(8,40,Math.PI,{wall:"#8D5A2B", roof:"#C0392B", lbl:"บ้านน้องฟ้า"});
+  thaiHouse(40,-9,0,{wall:"#7A4E2A", roof:"#6D8B3A", lbl:"บ้านน้องภู"});
+  [[-30,-30,0],[-46,-12,Math.PI/2],[-28,40,Math.PI],[-46,30,Math.PI/2],[48,18,-Math.PI/2],[32,-32,0],[-14,46,Math.PI],[-40,-32,0]]
+    .forEach(([x,z,r],i)=>thaiHouse(x,z,r,{wall:["#8D5A2B","#A1724A","#7B5232"][i%3], roof:["#B5402B","#8E3B2E","#A0522D","#5D7B3A"][i%4]}));
+
+  /* ----- ทุ่งนา ----- */
+  const paddy=(x0,x1,z0,z1)=>{
+    box(scene,x1-x0,.06,z1-z0,"#A38A5C",(x0+x1)/2,.03,(z0+z1)/2,{cast:false});
+    let k=0; for (let x=x0+3;x<x1;x+=6) for (let z=z0+3;z<z1;z+=6){ box(scene,5.3,.12,5.3,(k++%3)?"#8FCB4F":"#7DBA45",x,.07,z,{cast:false}); }
+    feat((x0+x1)/2,(z0+z1)/2,x1-x0,z1-z0,"#8FCB4F");
+  };
+  paddy(16,52,30,56); paddy(-56,-34,-38,-24);
+
+  // ควาย
+  { const g=new THREE.Group(); g.position.set(46,0,28); g.rotation.y=-.8; scene.add(g);
+    box(g,1.1,1,2.2,"#4E4A47",0,1.1,0);
+    for (const px of [-.4,.4]) for (const pz of [-.8,.8]) box(g,.22,.7,.22,"#3E3A37",px,.35,pz);
+    buffaloHead=new THREE.Group(); buffaloHead.position.set(0,1.3,1.3); g.add(buffaloHead);
+    box(buffaloHead,.7,.7,.8,"#4E4A47",0,0,.2); box(buffaloHead,1.3,.12,.14,"#D7CCC8",0,.35,.1);
+    box(buffaloHead,.14,.3,.14,"#D7CCC8",-.62,.5,.1); box(buffaloHead,.14,.3,.14,"#D7CCC8",.62,.5,.1);
+    colCirc(46,28,1.4);
+  }
+
+  /* ----- ต้นไม้ ----- */
+  const trunkG=new THREE.CylinderGeometry(.18,.26,1.7,6), leafG=new THREE.IcosahedronGeometry(1.35,0);
+  const palmT=new THREE.CylinderGeometry(.12,.18,4.6,6), frondG=new THREE.BoxGeometry(.5,.08,2.2);
+  const blocked=(x,z)=>{
+    if (Math.abs(z)<4.5 || Math.abs(x)<4.5) return true;
+    for (const c of COL){ if (c.t==="b" && x>c.x0-2.2 && x<c.x1+2.2 && z>c.z0-2.2 && z<c.z1+2.2) return true;
+      if (c.t==="c" && Math.hypot(x-c.x,z-c.z)<c.r+2) return true; }
+    for (const f of FEAT){ if (f.c==="#8FCB4F" && Math.abs(x-f.x)<f.w/2 && Math.abs(z-f.z)<f.d/2) return true; }
+    for (const s of NPC_SPOTS) if (Math.hypot(x-s[0],z-s[1])<3.2) return true;
+    if (x>-12 && x<-4 && z>18 && z<36) return true;
+    if (x>2 && x<16 && z>5 && z<15) return true;
+    if (x>17 && x<31 && z>10 && z<19) return true;
+    return false;
+  };
+  let placed=0;
+  for (let i=0;i<520 && placed<120;i++){
+    const x=(rng()*2-1)*55, z=-38+rng()*94;
+    if (blocked(x,z)) continue;
+    placed++;
+    if (rng()<0.32){
+      const t=new THREE.Mesh(palmT, mat("#8D6E4A")); t.position.set(x,2.3,z); t.rotation.z=(rng()-.5)*.2; t.castShadow=true; scene.add(t);
+      for (let k=0;k<6;k++){ const f=new THREE.Mesh(frondG, mat("#4E9A3A")); f.position.set(x,4.6,z); f.rotation.y=k/6*Math.PI*2; f.rotation.x=.45;
+        f.translateZ(.9); f.castShadow=true; scene.add(f); OCC.push(f); }
+      colCirc(x,z,.4);
+    } else {
+      const s=.8+rng()*.6;
+      const t=new THREE.Mesh(trunkG, mat("#7B5233")); t.position.set(x,.85*s,z); t.scale.setScalar(s); t.castShadow=true; scene.add(t);
+      const l=new THREE.Mesh(leafG, mat(rng()<.5?"#3F8F3A":"#56A63F")); l.position.set(x,2.5*s,z); l.scale.setScalar(s*(0.9+rng()*.4)); l.rotation.y=rng()*3; l.castShadow=true; scene.add(l); OCC.push(l);
+      colCirc(x,z,.55*s);
+    }
+  }
+
+  /* ----- ภูเขา + เมฆ ----- */
+  for (let i=0;i<26;i++){ const a=i/26*Math.PI*2, r=110+rng()*25, h=22+rng()*26;
+    const m=new THREE.Mesh(new THREE.ConeGeometry(14+rng()*10,h,6), mat(i%2?"#6E8F6A":"#7C9C76")); m.position.set(Math.cos(a)*r,h/2-1,Math.sin(a)*r+8); m.rotation.y=rng()*3; scene.add(m); }
+  const cg=new THREE.IcosahedronGeometry(3,0), cm=new THREE.MeshLambertMaterial({color:0xffffff, flatShading:true});
+  for (let i=0;i<12;i++){ const g=new THREE.Group(); for(let k=0;k<3;k++){ const m=new THREE.Mesh(cg,cm); m.position.set(k*3.2-3,rng(),rng()*2); m.scale.set(1+rng()*.6,.55,1); g.add(m); }
+    g.position.set((rng()*2-1)*120, 34+rng()*12, (rng()*2-1)*100); scene.add(g); clouds.push(g); }
+}
+
+/* =====================================================================
+   NPCs
+   ===================================================================== */
+const NPC_SPOTS = [[-19,-13.6],[-16,-13.2],[-12.6,-13.6],[-38,4.6],[-36.4,4.8],[7,35.4],[9.4,35.4],[38.8,-3.8],[41.2,-3.8],
+  [9,10],[15,-14.2],[-18,13.8],[-4.6,27],[24,15],[27.6,16.6],[28,-9],[31,-8.4],[20,31]];
+function addNPC(id,o){
+  const p=o.hero?hero(o.hero):person(o.look); p.position.set(o.x,0,o.z); p.rotation.y=o.ry||0; scene.add(p);
+  const hh=o.hero?({wizard:3.15,knight:2.65,guardian:2.7,king:2.55}[o.hero]||2.6):(o.look.kid?1.85:2.6);
+  const tag=label(o.name,{h:.5, bg:"rgba(14,20,48,.92)", fg:"#ffffff", border:o.color||"#FFC107", top:true}); tag.position.set(0,hh,0); p.add(tag);
+  const mk=marker(hh+.7); p.add(mk);
+  const n=Object.assign({id, obj:p, tag, mk, baseRy:o.ry||0}, o); NPC[id]=n;
+  if (!o.path) colCirc(o.x,o.z,o.hero?.55:.45);
+  return n;
+}
+function buildNPCs(){
+  const R=Math.PI;
+  addNPC("wizard",{name:"นักเวทย์",role:"แอดมินจังหวัด",icon:"🧙",color:"#1565C0",x:-19,z:-13.6,hero:"wizard"});
+  addNPC("knight",{name:"อัศวิน",role:"แอดมินตำบล",icon:"⚔️",color:"#7B1FA2",x:-16,z:-13.2,hero:"knight"});
+  addNPC("cms",{name:"ผู้พิทักษ์",role:"ประธาน CMS ตำบล",icon:"📜",color:"#3949AB",x:-12.6,z:-13.6,hero:"guardian"});
+  addNPC("parentA",{name:"แม่ของน้องดาว",role:"ผู้ปกครอง",icon:"👩",color:"#8D6E63",x:-38,z:4.6,ry:R,look:{shirt:"#C2185B",pants:"#4E342E"}});
+  addNPC("kidA",{name:"น้องดาว",role:"เด็กในบ้านเป้าหมาย",icon:"👧",color:"#8D6E63",x:-36.4,z:4.8,ry:R,look:{shirt:"#FFB74D",pants:"#5D4037",kid:true}});
+  addNPC("parentB",{name:"แม่ของน้องฟ้า",role:"ผู้ปกครอง",icon:"👩",color:"#8D6E63",x:7,z:35.4,ry:R,look:{shirt:"#558B2F",pants:"#3E2723",hat:"straw"}});
+  addNPC("kidB",{name:"น้องฟ้า",role:"เด็กในบ้านเป้าหมาย",icon:"👧",color:"#8D6E63",x:9.4,z:35.4,ry:R,look:{shirt:"#8D6E63",pants:"#4E342E",kid:true,hat:"straw"}});
+  addNPC("parentC",{name:"ลุงของน้องภู",role:"ผู้ปกครอง",icon:"👨",color:"#8D6E63",x:38.8,z:-3.8,look:{shirt:"#455A64",pants:"#263238",hair:"#555"}});
+  addNPC("kidC",{name:"น้องภู",role:"เด็กในบ้านเป้าหมาย",icon:"👦",color:"#8D6E63",x:41.2,z:-3.8,look:{shirt:"#90A4AE",pants:"#37474F",kid:true}});
+  addNPC("cm",{name:"นักประดิษฐ์",role:"ผู้จัดการรายกรณี (CM)",icon:"🔧",color:"#FF6F00",x:9,z:10,ry:R/2,hero:"inventor"});
+  addNPC("teacher",{name:"ครูแนะแนว",role:"โรงเรียนบ้านธารทอง",icon:"👩‍🏫",color:"#A1887F",x:15,z:-14.2,look:{shirt:"#B8A27A",pants:"#5D4037"}});
+  addNPC("nurse",{name:"พยาบาล",role:"รพ.สต.ธารทอง",icon:"👩‍⚕️",color:"#43A047",x:-18,z:13.8,ry:R,look:{shirt:"#FAFAFA",pants:"#E0E0E0",hat:"cap",hatColor:"#FFFFFF"}});
+  addNPC("leader",{name:"ประธานกลุ่มทอผ้า",role:"กลุ่มอาชีพในตำบล",icon:"🧵",color:"#AD1457",x:-4.6,z:27,ry:-R/2,look:{shirt:"#AD1457",pants:"#4A148C"}});
+  addNPC("king",{name:"พระราชา",role:"ประธาน TZD ตำบล",icon:"👑",color:"#2E7D32",x:24,z:15,hero:"king"});
+  addNPC("monk",{name:"พระครู",role:"วัดธารทอง",icon:"🙏",color:"#FB8C00",x:27.6,z:16.6,ry:-.5,look:{shirt:"#F57C00",pants:"#F57C00",robe:true,hair:null}});
+  addNPC("kid1",{name:"เด็กเตะบอล",role:"นักเรียน",icon:"⚽",color:"#1E88E5",x:28,z:-9,look:{shirt:"#FFFFFF",pants:"#1A237E",kid:true}});
+  addNPC("kid2",{name:"เด็กเตะบอล",role:"นักเรียน",icon:"⚽",color:"#1E88E5",x:31,z:-8.4,ry:R,look:{shirt:"#FFFFFF",pants:"#1A237E",kid:true}});
+  addNPC("farmer",{name:"ลุงชาวนา",role:"ชาวบ้าน",icon:"🌾",color:"#8D6E63",x:20,z:31,ry:R*0.6,look:{shirt:"#5D4037",pants:"#3E2723",hat:"straw"}});
+  addNPC("osm",{name:"อสม.แก้ว",role:"อาสาสมัครสาธารณสุข",icon:"💗",color:"#EC407A",x:3.6,z:4,look:{shirt:"#F06292",pants:"#37474F"},
+    path:[[3.6,4],[3.6,30],[-3.6,30],[-3.6,4],[-30,3.6],[-30,-3.6],[-3.6,-3.6],[-3.6,-30],[3.6,-30],[3.6,-3.6],[30,-3.6],[30,3.6]], pi:1});
+  // ball
+  const ball=new THREE.Mesh(new THREE.IcosahedronGeometry(.22,1), mat("#FFFFFF")); ball.castShadow=true; ball.position.set(29.5,.22,-8.7); scene.add(ball); NPC.kid1.ball=ball;
+}
+
+/* =====================================================================
+   PLAYER & CAMERA
+   ===================================================================== */
+const playerShirt = new THREE.MeshPhongMaterial({color:0x7B1FA2, flatShading:true, shininess:6}); // role sash
+let player;
+const cam = {yaw:0.55, pitch:0.42, dist:9, tdist:9};
+let walkPh=0, walkAmt=0;
+
+/* =====================================================================
+   INPUT
+   ===================================================================== */
+const keys={};
+const joy={x:0,y:0,id:null};
+const drag={id:null,x:0,y:0};
+const isTouch = matchMedia("(pointer: coarse)").matches || "ontouchstart" in window;
+addEventListener("keydown",e=>{
+  keys[e.code]=true;
+  if (DLG.open){ if (["Space","Enter"].includes(e.code)) { e.preventDefault(); dlgTap(); } if (/^Digit[1-3]$/.test(e.code)) pickByKey(Number(e.code.slice(5))-1); return; }
+  if (e.code==="KeyE" || e.code==="Enter") tryTalk();
+});
+addEventListener("keyup",e=>{ keys[e.code]=false; });
+canvas.addEventListener("pointerdown",e=>{ if (drag.id!==null) return; drag.id=e.pointerId; drag.x=e.clientX; drag.y=e.clientY; canvas.setPointerCapture(e.pointerId); });
+canvas.addEventListener("pointermove",e=>{ if (e.pointerId!==drag.id) return;
+  const dx=e.clientX-drag.x, dy=e.clientY-drag.y; drag.x=e.clientX; drag.y=e.clientY;
+  cam.yaw -= dx*0.0065; cam.pitch = clamp(cam.pitch + dy*0.0045, 0.12, 1.15); });
+const endDrag=e=>{ if (e.pointerId===drag.id) drag.id=null; };
+canvas.addEventListener("pointerup",endDrag); canvas.addEventListener("pointercancel",endDrag);
+canvas.addEventListener("wheel",e=>{ e.preventDefault(); cam.tdist=clamp(cam.tdist+e.deltaY*0.01,5,16); },{passive:false});
+const joyEl=document.getElementById("joy"), knob=document.getElementById("knob");
+function joyMove(e){ const r=joyEl.getBoundingClientRect(), cx=r.left+r.width/2, cy=r.top+r.height/2;
+  let dx=e.clientX-cx, dy=e.clientY-cy; const d=Math.hypot(dx,dy), m=46; if (d>m){ dx=dx/d*m; dy=dy/d*m; }
+  knob.style.transform=`translate(${dx}px,${dy}px)`; joy.x=dx/m; joy.y=dy/m; }
+joyEl.addEventListener("pointerdown",e=>{ joy.id=e.pointerId; joyEl.setPointerCapture(e.pointerId); joyMove(e); });
+joyEl.addEventListener("pointermove",e=>{ if (e.pointerId===joy.id) joyMove(e); });
+const joyEnd=e=>{ if (e.pointerId!==joy.id) return; joy.id=null; joy.x=joy.y=0; knob.style.transform=""; };
+joyEl.addEventListener("pointerup",joyEnd); joyEl.addEventListener("pointercancel",joyEnd);
+document.getElementById("act").addEventListener("click",tryTalk);
+
+/* =====================================================================
+   HUD
+   ===================================================================== */
+const $ = id=>document.getElementById(id);
+function objective(){
+  const n=Object.values(S.houses).filter(Boolean).length, r=Object.values(S.res).filter(Boolean).length;
+  switch(S.step){
+    case 0: return {role:"admin", title:"ด่าน 1 · เปิดประตูสู่ภารกิจ", text:"ไปพบนักเวทย์ที่หน้า อบต.ธารทอง", targets:["wizard"]};
+    case 1: return {role:"admin", title:"ด่าน 2 · ค้นหารัชทายาท", text:"คุยกับอัศวิน แอดมินตำบล", targets:["knight"]};
+    case 2: return {role:"surveyor", title:"ด่าน 3 · พิสูจน์ความจริง", text:`สำรวจบ้านเป้าหมาย ${n}/3 หลัง`, targets:["A","B","C"].filter(k=>!S.houses[k]).map(k=>"parent"+k)};
+    case 3: return {role:"cm", title:"ด่าน 4 · วางแผนกลับวัง", text:"พบนักประดิษฐ์ที่ศาลาประชาคม", targets:["cm"]};
+    case 4: return {role:"cm", title:"ด่าน 4 · วางแผนกลับวัง", text:`รวบรวมเสบียงในตำบล ${r}/3 แหล่ง`, targets:[["edu","teacher"],["health","nurse"],["econ","leader"]].filter(([k])=>!S.res[k]).map(x=>x[1])};
+    case 5: return {role:"cm", title:"ด่าน 4 · วางแผนกลับวัง", text:"กลับไปประกอบแผนกับนักประดิษฐ์", targets:["cm"]};
+    case 6: return {role:"cms", title:"ด่าน 5 · ฝ่ากำแพงปราการ", text:"นำแผนไปให้ผู้พิทักษ์ตรวจที่ อบต.", targets:["cms"]};
+    case 7: return {role:"chair", title:"ด่าน 6 · ขึ้นสู่บัลลังก์", text:"เข้าเฝ้าพระราชาที่ลานวัด", targets:["king"]};
+    default: return {role:"chair", title:"ภารกิจสำเร็จ", text:"เดินเล่นในตำบลได้อย่างอิสระ", targets:[]};
+  }
+}
+function updateHUD(){
+  const o=objective(), R=ROLE[o.role];
+  $("chip").textContent="สวมบท: "+R.n; $("chip").style.background=R.c;
+  $("otitle").textContent=o.title; $("otext").textContent=o.text;
+  $("mt").style.width=(S.trust/METER_MAX*100)+"%"; $("ma").style.width=(S.acc/METER_MAX*100)+"%";
+  $("items").innerHTML=ITEMS.map((it,i)=>`<span class="slot ${S.items.includes(i)?"on":""}" title="${it.n}">${it.i}</span>`).join("");
+  playerShirt.color.set(R.c);
+  for (const id in NPC) NPC[id].mk.visible = o.targets.includes(id);
+}
+function setStep(n){ S.step=n; updateHUD(); }
+function toast(t){ const el=$("toast"); el.textContent=t; el.hidden=false; el.classList.remove("show"); void el.offsetWidth; el.classList.add("show"); }
+function giveItem(i){
+  if (!S.items.includes(i)) S.items.push(i);
+  const p=$("pop"); p.innerHTML=`<div class="card page"><div class="big">${ITEMS[i].i}</div><h3>ได้รับ ${ITEMS[i].n}!</h3></div>`; p.hidden=false;
+  clearTimeout(giveItem.t); giveItem.t=setTimeout(()=>p.hidden=true,1950); updateHUD();
+}
+
+/* minimap */
+const mapC=$("map"), mctx=mapC.getContext("2d"), mapBase=document.createElement("canvas");
+mapBase.width=232; mapBase.height=232;
+const MS=232/120, mx=x=>(x+60)*MS, mz=z=>(z-8+60)*MS;
+function drawMapBase(){ const c=mapBase.getContext("2d"); c.fillStyle="#86B852"; c.fillRect(0,0,232,232);
+  for (const f of FEAT){ c.fillStyle=f.c; c.fillRect(mx(f.x-f.w/2), mz(f.z-f.d/2), f.w*MS, f.d*MS); } }
+function drawMap(t){
+  mctx.drawImage(mapBase,0,0);
+  const o=objective(), pulse=4+Math.sin(t*6)*1.5;
+  for (const id of o.targets){ const n=NPC[id]; const p=n.obj.position;
+    mctx.fillStyle="#FFC107"; mctx.strokeStyle="#3E2810"; mctx.lineWidth=2; mctx.beginPath(); mctx.arc(mx(p.x),mz(p.z),pulse+2,0,7); mctx.fill(); mctx.stroke(); }
+  const p=player.position, a=player.rotation.y;
+  mctx.save(); mctx.translate(mx(p.x),mz(p.z)); mctx.rotate(Math.atan2(Math.cos(a),Math.sin(a)));
+  mctx.fillStyle="#fff"; mctx.strokeStyle="#0E1430"; mctx.lineWidth=2.5; mctx.beginPath(); mctx.moveTo(9,0); mctx.lineTo(-6,6); mctx.lineTo(-3,0); mctx.lineTo(-6,-6); mctx.closePath(); mctx.fill(); mctx.stroke();
+  mctx.restore();
+}
+function drawCompass(){
+  const o=objective(); if (!o.targets.length){ $("compass").style.visibility="hidden"; return; }
+  $("compass").style.visibility="visible";
+  let best=null, bd=1e9; const p=player.position;
+  for (const id of o.targets){ const q=NPC[id].obj.position, d=Math.hypot(q.x-p.x,q.z-p.z); if (d<bd){ bd=d; best=q; } }
+  const dx=best.x-p.x, dz=best.z-p.z, sy=Math.sin(cam.yaw), cy=Math.cos(cam.yaw);
+  const fx=-dx*sy - dz*cy, rx=dx*cy - dz*sy;
+  $("arrow").style.transform=`rotate(${Math.atan2(rx,fx)}rad)`;
+  $("dist").textContent=Math.round(bd)+" ม.";
+}
+
+/* =====================================================================
+   DIALOG ENGINE
+   ===================================================================== */
+const DLG={open:false, steps:[], i:0, typing:null, full:"", state:"text", picks:null};
+const say=(who,text)=>({who,text}), ask=k=>({choice:k}), act=fn=>({act:fn});
+function speaker(id){
+  if (id==="nar") return {name:"", role:"", icon:"📖", color:"#A1887F"};
+  if (id==="phone") return {name:"กลุ่มไลน์หมู่บ้าน", role:"ข้อความใหม่", icon:"📱", color:"#06C755"};
+  if (id==="me"){ const R=ROLE[objective().role]; return {name:"ท่าน (นักสืบ)", role:"กำลังสวมบท "+R.n, icon:"🕵️", color:R.c}; }
+  const n=NPC[id]; return {name:n.name, role:n.role, icon:n.icon, color:n.color};
+}
+function runDialog(steps){
+  DLG.open=true; DLG.steps=steps; DLG.i=0;
+  $("dlg").hidden=false; $("act").hidden=true; joyEl.hidden=true; joy.x=joy.y=0; knob.style.transform="";
+  nextStep();
+}
+function closeDialog(){ DLG.open=false; $("dlg").hidden=true; if (isTouch && !S.ended) joyEl.hidden=false; canvas.focus({preventScroll:true}); }
+function nextStep(){
+  if (DLG.i>=DLG.steps.length){ closeDialog(); return; }
+  const st=DLG.steps[DLG.i++];
+  if (st.act){ const more=st.act(); if (Array.isArray(more)) DLG.steps.splice(DLG.i,0,...more); if (DLG.open) nextStep(); return; }
+  const dc=$("dc"), dt=$("dt"); dc.innerHTML="";
+  if (st.choice){ renderChoice(st.choice); return; }
+  const sp=speaker(st.who);
+  setHead(sp, st.who==="nar");
+  dt.className="dt"+(st.who==="nar"?" nar":"");
+  DLG.state="text"; typeText(st.text);
+  $("dnext").textContent="แตะเพื่อไปต่อ ▼"; $("dnext").hidden=false;
+}
+function setHead(sp, hide){
+  $("dhead").hidden=!!hide;
+  $("dp").textContent=sp.icon; $("dp").style.borderColor=sp.color;
+  $("dn").textContent=sp.name; $("dn").style.color=sp.color; $("dr").textContent=sp.role;
+}
+function typeText(t){
+  const dt=$("dt"), chars=Array.from(t); DLG.full=t; let k=0; clearInterval(DLG.typing);
+  dt.textContent="";
+  DLG.typing=setInterval(()=>{ k+=2; dt.textContent=chars.slice(0,k).join(""); if (k>=chars.length){ clearInterval(DLG.typing); DLG.typing=null; } }, 22);
+}
+function dlgTap(){
+  if (DLG.state==="choosing") return;
+  if (DLG.typing){ clearInterval(DLG.typing); DLG.typing=null; $("dt").textContent=DLG.full; return; }
+  nextStep();
+}
+$("dlgIn").addEventListener("click",e=>{ if (e.target.closest(".ch")) return; dlgTap(); });
+function shuffle(a){ const x=[...a]; for (let i=x.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [x[i],x[j]]=[x[j],x[i]]; } return x; }
+function renderChoice(key){
+  const q=CH[key], sp=speaker("me");
+  setHead(sp,false); $("dt").className="dt";
+  $("dt").innerHTML=`<span class="ask">${q.ask}</span>`;
+  DLG.state="choosing"; $("dnext").hidden=true;
+  DLG.picks=shuffle(q.c.map((c,i)=>({...c,i})));
+  $("dc").innerHTML=DLG.picks.map((o,k)=>`<button class="ch" data-k="${k}"><b>${"กขค"[k]}</b><span>${o.x}</span></button>`).join("");
+  $("dc").querySelectorAll(".ch").forEach(b=>b.onclick=()=>choose(key, Number(b.dataset.k)));
+}
+function pickByKey(k){ if (DLG.state==="choosing" && DLG.picks && DLG.picks[k]){ const b=$("dc").querySelector(`[data-k="${k}"]`); if (b) b.click(); } }
+function choose(key,k){
+  const q=CH[key], c=DLG.picks[k];
+  $("dc").querySelectorAll(".ch").forEach(b=>b.disabled=true);
+  $("dc").querySelector(`[data-k="${k}"]`).classList.add("picked");
+  S.score+=c.s; S.trust=clamp(S.trust+c.t,0,METER_MAX); S.acc=clamp(S.acc+c.a,0,METER_MAX);
+  S.log.push({title:q.title, s:c.s}); updateHUD();
+  const kind=c.s===2?"good":c.s===1?"mid":"bad", badge=c.s===2?"✦ ทางของผู้กล้า":c.s===1?"△ พอไปได้":"✕ ควรเลี่ยง";
+  const sg=v=>v>0?"+"+v:""+v;
+  const delta=[c.t?`❤️ ${sg(c.t)}`:"", c.a?`🛡️ ${sg(c.a)}`:""].filter(Boolean).join("  ")||"มาตรวัดคงเดิม";
+  const best=q.c.find(x=>x.s===2);
+  const fb=document.createElement("div"); fb.className="fb "+kind;
+  fb.innerHTML=`<div class="fb-h"><span class="badge">${badge}</span><span class="delta">${delta}</span></div><p>${c.fb}</p>${c.s<2?`<p class="best"><strong>ทางที่ดีที่สุด:</strong> ${best.x}</p>`:""}`;
+  $("dc").appendChild(fb);
+  DLG.state="text"; $("dnext").textContent="ต่อไป ▶"; $("dnext").hidden=false;
+  fb.scrollIntoView({block:"nearest", behavior:"smooth"});
+}
+
+/* =====================================================================
+   STORY / TALK
+   ===================================================================== */
+function remind(id){ return [say(id, "ภารกิจตอนนี้ของท่าน: "+objective().text+" ลองดูลูกศรทองที่มุมจอนะ")]; }
+function houseDone(k, name){
+  S.houses[k]=true; const n=Object.values(S.houses).filter(Boolean).length;
+  toast(`บันทึกแบบสำรวจ 7 ส่วนของ${name}แล้ว · ${n}/3`); updateHUD();
+  if (n<3) return [say("nar", `เหลือบ้านเป้าหมายอีก ${3-n} หลัง ดูหมุดทองบนแผนที่มุมขวาบน`)];
+  return [
+    say("nar","ทันทีที่สำรวจบ้านหลังสุดท้ายเสร็จ โทรศัพท์ของท่านก็สั่น"),
+    say("phone","เจอเด็ก ๆ ไหม ส่งรูปบ้านกับรูปน้อง ๆ มาให้ดูในกลุ่มหน่อยสิ!"),
+    ask("PRIVACY"), act(()=>giveItem(2)),
+    say("nar","นกพิราบสื่อสารนำข่าวผ่านระบบ TZD ไปถึงทีมแล้ว นักประดิษฐ์ (CM) รอท่านอยู่ที่ศาลาประชาคม"),
+    act(()=>setStep(3)),
+  ];
+}
+function gotRes(k, label){
+  S.res[k]=true; const n=Object.values(S.res).filter(Boolean).length;
+  toast(`ได้รับเสบียง: ${label} · ${n}/3`);
+  if (n===3){ setStep(5); return [say("nar","เสบียงครบทั้ง 3 ด้านแล้ว กลับไปหานักประดิษฐ์ที่ศาลาประชาคม")]; }
+  updateHUD(); return null;
+}
+const TALK = {
+  wizard:s=> s===0 ? [
+      say("wizard","ยินดีต้อนรับสู่ตำบลธารทอง ผู้กล้า! ข้าคือนักเวทย์ แอดมินจังหวัด ผู้ดูแลระบบ TZD ทั้งแคว้น"),
+      say("wizard","ประตูวิเศษหรือระบบ TZD เปิดใช้งานแล้ว แต่ทีมตำบลนี้ยังไม่มีใครมีบัญชีเลย ทั้งผู้สำรวจ CM ประธาน TZD และประธาน CMS"),
+      ask("ACCOUNTS"), act(()=>giveItem(0)),
+      say("wizard","ประตูเปิดแล้ว! ไปคุยกับอัศวิน แอดมินตำบล ที่ยืนอยู่ข้าง ๆ ข้าได้เลย"),
+      act(()=>setStep(1)) ]
+    : remind("wizard"),
+  knight:s=> s===1 ? [
+      say("knight","ข้าคืออัศวิน แอดมินตำบล รายชื่อเด็กที่มีข้อมูลสืบต่อมามีถึง 120 ราย แต่ผู้สำรวจของเรามีแค่ 4 คน"),
+      ask("SCREEN"),
+      say("knight","หลังคัดกรอง เหลือบ้านที่ต้องพิสูจน์ความจริงด่วน 3 หลัง ข้าปักหมุดไว้ในแผนที่ให้แล้ว"),
+      say("knight","จากนี้ท่านสวมบทนักสืบ (ผู้สำรวจ) ออกเดินทางได้เลย! ถ้าหลงทาง ถาม อสม.แก้ว ที่เดินอยู่แถวถนนได้"),
+      act(()=>{ giveItem(1); setStep(2); }) ]
+    : s<1 ? [say("knight","รอให้นักเวทย์เปิดประตูระบบก่อนนะ ท่านลองคุยกับนักเวทย์ทางซ้ายมือข้าดู")] : remind("knight"),
+  cms:s=> s===6 ? [
+      say("cms","ข้าคือผู้พิทักษ์ประจำเมือง ประธาน CMS ตำบล ขอดูแผนการดูแลของน้องฟ้าหน่อย"),
+      say("cms","พาหนะเข้ากับเส้นทางดี แต่ทรัพยากรด้านเศรษฐกิจยังเบาไป รายได้จากกลุ่มทอผ้าช่วงเดือนแรกอาจยังไม่พอใช้จ่าย"),
+      ask("KICKBACK"),
+      say("cms","แผนฉบับปรับปรุงผ่านทั้ง 2 เกณฑ์ ข้าขอประทับตรารับรองและอนุมัติ!"),
+      act(()=>giveItem(4)),
+      say("cms","นำแผนไปเข้าเฝ้าพระราชา ประธาน TZD ตำบล ที่ลานวัดได้เลย"),
+      act(()=>setStep(7)) ]
+    : [say("cms", s<6 ? "ข้ารอตรวจแผนการดูแลรายกรณีอยู่ เมื่อนักประดิษฐ์ทำแผนเสร็จ ค่อยนำมาให้ข้านะ" : "ตราประทับของข้าอยู่บนแผนแล้ว ขอให้ภารกิจราบรื่น")],
+  parentA:s=>{
+    if (S.houses.A) return [say("parentA","ขอบคุณที่อธิบายให้ฟังนะ ถ้ามีอะไรคืบหน้าก็บอกกันด้วย")];
+    if (s!==2) return [say("parentA","สวัสดีจ้ะ แวะมาทำอะไรแถวนี้หรือ")];
+    return [ say("nar","แม่ของน้องดาวเปิดประตูแง้มไว้ สีหน้าระแวง"),
+      say("parentA","มาถามเรื่องลูกฉันทำไม จะเอาข้อมูลไปทำอะไร"),
+      ask("CONSENT"),
+      say("parentA","ถ้าเป็นเรื่องช่วยลูกก็คุยกันได้ ดาวไม่ได้ไปเรียนตั้งแต่ย้ายมาจากต่างจังหวัด ยังหาที่เรียนใหม่ไม่ได้"),
+      act(()=>houseDone("A","บ้านน้องดาว")) ];
+  },
+  kidA:()=>[say("kidA", S.houses.A ? "หนูอยากไปโรงเรียนใหม่เร็ว ๆ ค่ะ" : "สวัสดีค่ะ")],
+  parentB:s=>{
+    if (S.houses.B) return [say("parentB","ฟ้าเขาอยากเรียนจริง ๆ ถ้ามีทางช่วยได้ แม่ก็ดีใจ")];
+    if (s!==2) return [say("parentB","สวัสดีจ้ะ เพิ่งกลับจากไร่เลย")];
+    return [ say("parentB","ฟ้ายังมีชื่ออยู่ที่โรงเรียนนะ ไม่ได้มีปัญหาอะไรหรอก"),
+      say("kidB","จริง ๆ หนูไม่ได้ไปเรียนสามเดือนแล้วค่ะ ต้องไปช่วยแม่รับจ้างในไร่ เงินไม่พอ"),
+      ask("RECORD"),
+      act(()=>houseDone("B","บ้านน้องฟ้า")) ];
+  },
+  kidB:()=>[say("kidB", S.houses.B ? "ถ้าเรียนไปด้วยทำงานไปด้วยได้ หนูอยากเรียนต่อค่ะ" : "สวัสดีค่ะ")],
+  parentC:s=>{
+    if (S.houses.C) return [say("parentC","อืม... ขอบใจที่แวะมา")];
+    if (s!==2) return [say("parentC","มีธุระอะไรหรือ")];
+    return [ say("parentC","ภูมันไม่ชอบเรียน อยู่บ้านช่วยงานดีกว่า"),
+      say("nar","ระหว่างพูดคุย ท่านสังเกตว่าน้องภูมีรอยช้ำที่แขน ดูหวาดกลัว และกระซิบเบา ๆ ว่าไม่อยากอยู่บ้าน"),
+      ask("DANGER"),
+      act(()=>houseDone("C","บ้านน้องภู")) ];
+  },
+  kidC:()=>[say("kidC", S.houses.C ? "(น้องภูพยักหน้าเบา ๆ)" : "(น้องภูก้มหน้า ไม่พูดอะไร)")],
+  cm:s=>{
+    if (s===3) return [
+      say("cm","ข่าวจากนกพิราบมาถึงแล้ว! ข้าคือนักประดิษฐ์ ผู้จัดการรายกรณี"),
+      say("cm","เคสของน้องดาวกับน้องภูมีทีมรับช่วงต่อแล้ว ตอนนี้เรามาออกแบบพาหนะให้น้องฟ้ากัน น้องอายุ 15 ปี ต้องช่วยแม่ทำงานในไร่เพราะรายได้ไม่พอ แต่ยังอยากเรียนต่อ"),
+      ask("APPROACH"),
+      say("cm","จากนี้ท่านสวมบทนักประดิษฐ์ ไปหาเสบียงจริงในตำบล 3 แหล่ง: ครูแนะแนวที่โรงเรียน พยาบาลที่ รพ.สต. และประธานกลุ่มทอผ้า"),
+      act(()=>setStep(4)) ];
+    if (s===5) return [
+      say("cm","เสบียงครบทั้งการศึกษา สุขภาพ และรายได้! ข้าประกอบเป็นแผนการดูแลรายกรณีของน้องฟ้า แล้วบันทึกส่งในระบบ TZD เรียบร้อย"),
+      act(()=>giveItem(3)),
+      say("cm","นำแผนไปให้ผู้พิทักษ์ ประธาน CMS ตรวจที่หน้า อบต. ได้เลย"),
+      act(()=>setStep(6)) ];
+    if (s===4) return remind("cm");
+    return [say("cm", s<3 ? "ข้ารอข่าวจากนักสืบอยู่ เมื่อสำรวจครบ ข้าจะออกแบบพาหนะให้รัชทายาทแต่ละคน" : "พาหนะของน้องฟ้าออกเดินทางแล้ว อย่าลืมติดตามผลตามรอบนะ")];
+  },
+  teacher:s=>{
+    if (s===4 && !S.res.edu) return [
+      say("teacher","โรงเรียนมีการเรียนแบบยืดหยุ่น เรียนวันเสาร์อาทิตย์และเรียนออนไลน์ได้ ครูยินดีเป็นผู้ประสานให้น้องฟ้าเองค่ะ"),
+      act(()=>gotRes("edu","📚 การเรียนแบบยืดหยุ่น")) ];
+    return [say("teacher", S.res.edu ? "ครูจะติดตามการเรียนของน้องฟ้าให้นะคะ" : "ถ้าเจอเด็กที่หลุดจากระบบ บอกครูได้เลยนะคะ โรงเรียนพร้อมช่วย")];
+  },
+  nurse:s=>{
+    if (s===4 && !S.res.health) return [
+      say("nurse","แม่ของน้องฟ้าปวดหลังเรื้อรังจากงานไร่ ทาง รพ.สต. จะเข้าไปเยี่ยมบ้าน และดูแลสุขภาพให้ทั้งครอบครัวค่ะ"),
+      act(()=>gotRes("health","❤️ เยี่ยมบ้านดูแลสุขภาพ")) ];
+    return [say("nurse", S.res.health ? "เรานัดเยี่ยมบ้านน้องฟ้าไว้แล้วค่ะ" : "รพ.สต. ร่วมเป็นเครือข่ายดูแลเด็กในตำบลด้วยนะคะ")];
+  },
+  leader:s=>{
+    if (s===4 && !S.res.econ) return [
+      say("leader","กลุ่มทอผ้าของเรารับสมาชิกใหม่ ทำงานที่บ้านได้ มีรายได้ทุกสัปดาห์ แม่ของน้องฟ้ามาร่วมได้เลย น้องจะได้ไม่ต้องไปรับจ้างในไร่"),
+      ask("RESOURCE"),
+      act(()=>gotRes("econ","💰 รายได้จากกลุ่มทอผ้า")) ];
+    return [say("leader", S.res.econ ? "รอต้อนรับสมาชิกใหม่อยู่นะ" : "ผ้าทอบ้านธารทองขึ้นชื่อนะ แวะดูได้")];
+  },
+  king:s=> s===7 ? [
+      say("king","ข้าคือพระราชา ประธาน TZD ตำบล ข้าตรวจไอเทมทั้งห้าและแผนการเดินทางของน้องฟ้าครบถ้วนแล้ว"),
+      ask("FOLLOW"),
+      say("king","ข้าขออนุมัติแต่งตั้ง! น้องฟ้าเข้าสู่ระบบการดูแลอย่างเป็นทางการแล้ว"),
+      act(()=>giveItem(5)),
+      act(()=>{ setStep(8); setTimeout(showEnd,1700); }) ]
+    : [say("king", s<7 ? "ข้ารอพิธีแต่งตั้งอยู่ที่ลานวัด เมื่อแผนได้รับตราประทับจากผู้พิทักษ์แล้วค่อยมาพบข้า" : "ภารกิจนี้ไม่มีฮีโร่เพียงคนเดียว ขอบใจทุกคนในทีม")],
+  monk:()=>[say("monk","เจริญพร โยม การช่วยให้เด็กสักคนได้กลับมาเรียน เป็นบุญใหญ่นัก")],
+  kid1:()=>[say("kid1","พี่มาเตะบอลด้วยกันไหมครับ!")],
+  kid2:()=>[say("kid2","เลิกเรียนแล้วพวกเรามาเล่นที่สนามทุกวันเลยครับ")],
+  farmer:()=>[say("farmer","ปีนี้ข้าวงามดี แต่ค่าแรงในไร่ยังน้อย หลายบ้านเลยต้องให้ลูกช่วยทำงาน")],
+  osm:s=>[say("osm", s===2
+      ? "บ้านน้องดาวอยู่ทางตะวันตก หลังคาสีฟ้า บ้านน้องฟ้าอยู่ทางใต้ติดทุ่งนา ส่วนบ้านน้องภูอยู่ทางตะวันออก ริมถนนใหญ่จ้ะ"
+      : s===4 ? "โรงเรียนอยู่ทางเหนือฝั่งขวา รพ.สต. อยู่ทางใต้ฝั่งซ้าย ส่วนกลุ่มทอผ้าตั้งแผงอยู่ริมถนนสายใต้จ้ะ"
+      : "ฉันเป็น อสม. รู้จักทุกบ้านในตำบล มีอะไรให้ช่วยบอกได้เลยนะ")],
+};
+let nearNPC=null;
+function tryTalk(){ if (!S.started || DLG.open || !nearNPC) return; const f=TALK[nearNPC.id]; if (f) runDialog(f(S.step)); }
+
+/* =====================================================================
+   ENDING
+   ===================================================================== */
+function showEnd(){
+  S.ended=true;
+  const r=RANKS.find(x=>S.score>=x.min);
+  const mk=s=>s===2?'<b style="color:var(--good)">✦</b>':s===1?'<b style="color:var(--mid)">△</b>':'<b style="color:var(--bad)">✕</b>';
+  $("endIn").innerHTML=`
+    <div class="end-medal">${r.m}</div>
+    <div class="eyebrow">ภารกิจตำบลธารทอง · สำเร็จ</div>
+    <h1 style="font-size:1.45rem;">${r.r}</h1>
+    <div class="end-score">${S.score}<small> / ${MAXSCORE}</small></div>
+    <p class="lede">${r.t}</p>
+    <div class="items" style="justify-content:center;">${ITEMS.map(it=>`<span class="slot on" style="max-width:40px;">${it.i}</span>`).join("")}</div>
+    <div class="review">${S.log.map(l=>`<div>${mk(l.s)}<span>${l.title}</span></div>`).join("")}</div>
+    <div class="row2">
+      <button class="btn" id="again">เล่นอีกครั้ง</button>
+      <button class="btn" id="roam">เดินเล่นต่อ</button>
+    </div>
+    <p class="motto">ภารกิจนี้ไม่มีฮีโร่เพียงคนเดียว</p>`;
+  $("end").hidden=false;
+  $("again").onclick=()=>location.reload();
+  $("roam").onclick=()=>{ $("end").hidden=true; S.ended=false; if (isTouch) joyEl.hidden=false; };
+}
+
+/* =====================================================================
+   LOOP
+   ===================================================================== */
+const clock=new THREE.Clock(); let T=0;
+const tmpV=new THREE.Vector3(), camDir=new THREE.Vector3(), ray=new THREE.Raycaster(); let frameN=0, camLift=0, camHit=false;
+function update(dt){
+  T+=dt;
+  // clouds, flag, buffalo
+  for (const c of clouds){ c.position.x+=dt*1.2; if (c.position.x>140) c.position.x=-140; }
+  if (flag){ const pos=flag.geometry.attributes.position, b=flag.userData.base;
+    for (let i=0;i<pos.count;i++){ const x=b[i*3]; pos.array[i*3+2]=Math.sin(x*2.4+T*4)*0.14*(x+1.1); } pos.needsUpdate=true; }
+  if (buffaloHead) buffaloHead.rotation.x=.25+Math.sin(T*.8)*.25;
+
+  if (!S.started){
+    const a=T*0.07; camera.position.set(Math.cos(a)*52, 30, Math.sin(a)*52+8); camera.lookAt(0,0,8);
+    sun.position.set(30,60,28); sun.target.position.set(0,0,8);
+    return;
+  }
+
+  // movement
+  let ix=0, iz=0;
+  if (!DLG.open && !S.ended){
+    if (keys.KeyW||keys.ArrowUp) iz+=1; if (keys.KeyS||keys.ArrowDown) iz-=1;
+    if (keys.KeyD||keys.ArrowRight) ix+=1; if (keys.KeyA||keys.ArrowLeft) ix-=1;
+    if (joy.id!==null){ ix+=joy.x; iz+=-joy.y; }
+  }
+  let mag=Math.hypot(ix,iz); if (mag>1){ ix/=mag; iz/=mag; mag=1; }
+  const sy=Math.sin(cam.yaw), cy=Math.cos(cam.yaw);
+  const mxv=(-sy)*iz + cy*ix, mzv=(-cy)*iz + (-sy)*ix;
+  const speed=(keys.ShiftLeft||keys.ShiftRight?9:5.6)*mag;
+  if (mag>0.05){
+    player.position.x+=mxv/mag*speed*dt; player.position.z+=mzv/mag*speed*dt;
+    resolve(player.position,.42);
+    const target=Math.atan2(mxv,mzv); let d=target-player.rotation.y; d=Math.atan2(Math.sin(d),Math.cos(d));
+    player.rotation.y+=d*Math.min(1,dt*12);
+  }
+  walkAmt+=((mag>0.05?Math.min(1,speed/5.6):0)-walkAmt)*Math.min(1,dt*10);
+  walkPh+=dt*(4+speed*1.3);
+  animWalk(player,walkPh,walkAmt);
+
+  // NPCs
+  nearNPC=null; let nd=2.9;
+  for (const id in NPC){
+    const n=NPC[id], o=n.obj;
+    if (n.path && !DLG.open){
+      const t=n.path[n.pi], dx=t[0]-o.position.x, dz=t[1]-o.position.z, d=Math.hypot(dx,dz);
+      const pd=Math.hypot(player.position.x-o.position.x, player.position.z-o.position.z);
+      if (pd>2.4){
+        if (d<.3) n.pi=(n.pi+1)%n.path.length;
+        else { o.position.x+=dx/d*1.6*dt; o.position.z+=dz/d*1.6*dt; o.rotation.y=Math.atan2(dx,dz); n.ph=(n.ph||0)+dt*6.5; animWalk(o,n.ph,1); }
+      } else animWalk(o,0,0);
+    }
+    if (id==="kid1"||id==="kid2"){ o.userData.body.position.y=Math.max(0,Math.sin(T*5+(id==="kid2"?1.5:0)))*.25; }
+    const dx=player.position.x-o.position.x, dz=player.position.z-o.position.z, d=Math.hypot(dx,dz);
+    if (d<4.2 && !(n.path && d>2.4)){ let t=Math.atan2(dx,dz)-o.rotation.y; t=Math.atan2(Math.sin(t),Math.cos(t)); o.rotation.y+=t*Math.min(1,dt*6); }
+    else if (!n.path){ let t=n.baseRy-o.rotation.y; t=Math.atan2(Math.sin(t),Math.cos(t)); o.rotation.y+=t*Math.min(1,dt*2); }
+    n.tag.visible=d<16;
+    if (n.mk.visible){ n.mk.userData.gem.rotation.y+=dt*2.4; n.mk.userData.gem.position.y=Math.sin(T*3)*.12;
+      const s=1+Math.sin(T*3)*.12; n.mk.userData.ring.scale.set(s,s,s); }
+    if (d<nd){ nd=d; nearNPC=n; }
+  }
+  if (NPC.kid1 && NPC.kid1.ball){ const b=NPC.kid1.ball; b.position.x=29.5+Math.sin(T*1.6)*1.3; b.position.y=.22+Math.abs(Math.sin(T*3.2))*.5; b.rotation.z-=dt*4; }
+
+  const act=$("act");
+  if (nearNPC && !DLG.open && !S.ended){ act.hidden=false; act.textContent=`💬 คุยกับ${nearNPC.name}`+(isTouch?"":" (E)"); }
+  else act.hidden=true;
+
+  // camera
+  cam.dist+=(cam.tdist-cam.dist)*Math.min(1,dt*6);
+  const focus=tmpV.set(player.position.x, 1.6, player.position.z);
+  const ep=Math.min(1.25, cam.pitch+camLift), cp=Math.cos(ep);
+  const want=new THREE.Vector3(focus.x+sy*cp*cam.dist, focus.y+Math.sin(ep)*cam.dist, focus.z+cy*cp*cam.dist);
+  if ((frameN++ % 3)===0){
+    camDir.subVectors(want, focus); const full=camDir.length(); camDir.normalize();
+    ray.set(focus, camDir); ray.far=full; camHit=ray.intersectObjects(OCC,true).length>0;
+  }
+  camLift = camHit ? Math.min(0.85, camLift+dt*1.6) : Math.max(0, camLift-dt*0.8);
+  camera.position.lerp(want, 1-Math.exp(-dt*9));
+  camera.lookAt(focus);
+  sun.position.set(focus.x+30, 60, focus.z+24); sun.target.position.set(focus.x,0,focus.z);
+
+  drawMap(T); drawCompass();
+}
+function loop(){ requestAnimationFrame(loop); update(Math.min(clock.getDelta(),0.05)); renderer.render(scene,camera); updateLabels(); }
+addEventListener("resize",()=>{ camera.aspect=innerWidth/innerHeight; camera.updateProjectionMatrix(); renderer.setSize(innerWidth,innerHeight); });
+
+/* =====================================================================
+   BOOT
+   ===================================================================== */
+$("how").innerHTML = (isTouch ? [
+    ["🕹️","จอยสติ๊กซ้ายล่างเพื่อเดิน ลากนิ้วบนจอเพื่อหมุนกล้อง"],
+    ["💬","เดินเข้าใกล้คน แล้วแตะปุ่มคุย"],
+  ] : [
+    ["⌨️","WASD หรือปุ่มลูกศรเพื่อเดิน กด Shift ค้างเพื่อวิ่ง"],
+    ["🖱️","ลากเมาส์เพื่อหมุนกล้อง หมุนล้อเพื่อซูม"],
+    ["💬","เข้าใกล้คนแล้วกด E เพื่อคุย"],
+  ]).concat([
+    ["✨","ตามเพชรทองลอยเหนือหัวคนที่ต้องพบ และลูกศรทองที่มุมจอ"],
+    ["🎭","แต่ละด่านท่านสวมบทต่างกัน ทุกการตัดสินใจมีผลต่อคะแนน"],
+  ]).map(([i,t])=>`<div><span>${i}</span><span>${t}</span></div>`).join("");
+
+(async function boot(){
+  try { await Promise.race([Promise.all([document.fonts.load('700 40px "Chakra Petch"'), document.fonts.load('600 20px "Sarabun"')]), new Promise(r=>setTimeout(r,2500))]); } catch(e){}
+  buildWorld(); buildNPCs();
+  player=hero("detective", playerShirt);
+  player.position.set(-4,0,6); player.rotation.y=Math.PI; scene.add(player);
+  drawMapBase(); updateHUD();
+  loop();
+  const b=$("start"); b.disabled=false; b.textContent="▶ เริ่มภารกิจ";
+  b.onclick=()=>{
+    $("title").hidden=true; S.started=true;
+    $("obj").hidden=false; mapC.hidden=false; $("mapN").hidden=false;
+    if (isTouch) joyEl.hidden=false; else { $("keys").hidden=false; setTimeout(()=>$("keys").hidden=true, 9000); }
+    camera.position.set(-4+Math.sin(cam.yaw)*20, 14, 6+Math.cos(cam.yaw)*20);
+    toast("ตามเพชรทองไปที่หน้า อบต. เพื่อพบนักเวทย์");
+    canvas.focus({preventScroll:true});
+  };
+})();
+</script>
+
+</body>
+</html>
